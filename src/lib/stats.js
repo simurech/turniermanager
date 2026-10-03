@@ -1,6 +1,6 @@
 // Statistik und Spassfunktionen: Form, Direktvergleich, Computer-Tipp, Wettquoten, Hall of Fame.
 // `history` ist eine Liste früherer Turnier-Dokumente (nächster Vorgänger zuerst).
-import { isPlayed, computeStandings, resolveKnockout, computeRanking, knockoutOf } from './tournament.js';
+import { isPlayed, computeStandings, resolveKnockout, computeRanking, knockoutOf, deriveState } from './tournament.js';
 
 export const normalizeName = (n) => String(n || '').trim().toLowerCase();
 
@@ -253,7 +253,7 @@ export function hallOfFame(docs) {
   const entry = (name) => {
     const key = normalizeName(name);
     if (!table.has(key)) {
-      table.set(key, { key, name, tournaments: 0, titles: 0, lastPlaces: 0, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 });
+      table.set(key, { key, name, tournaments: 0, titles: 0, seconds: 0, lastPlaces: 0, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 });
     }
     return table.get(key);
   };
@@ -267,6 +267,9 @@ export function hallOfFame(docs) {
     if (doc.phase === 'finished') {
       if (doc.players[doc.winner]) entry(doc.players[doc.winner].name).titles++;
       if (doc.players[doc.loser]) entry(doc.players[doc.loser].name).lastPlaces++;
+      // Zweiter Platz: Verlierer des Finales (aus der Endrangliste)
+      const second = deriveState(doc).ranking?.[1];
+      if (doc.players[second]) entry(doc.players[second].name).seconds++;
     }
     for (const m of playedMatches(doc)) {
       for (const [who, gf, ga] of [[m.home, m.hg, m.ag], [m.away, m.ag, m.hg]]) {
@@ -282,7 +285,7 @@ export function hallOfFame(docs) {
   });
   return [...table.values()]
     .map((e) => ({ ...e, winRate: e.played ? e.won / e.played : 0, goalDiff: e.goalsFor - e.goalsAgainst }))
-    .sort((a, b) => b.titles - a.titles || b.winRate - a.winRate || a.name.localeCompare(b.name, 'de'));
+    .sort((a, b) => b.titles - a.titles || b.seconds - a.seconds || b.winRate - a.winRate || a.name.localeCompare(b.name, 'de'));
 }
 
 // ------------------------------------------------------------------ Hilfen für Anzeige

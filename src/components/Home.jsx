@@ -109,7 +109,7 @@ function ArchiveCard({ row, admin, onChanged }) {
           <span className="small muted">
             {row.loserName ? `Verlierer: ${row.loserName} · ` : ''}
             {row.playerCount} Spieler · {dateOf(row.createdAt)}
-            {row.hidden ? ' · versteckt' : ''}
+            {row.hidden ? (row.hiddenReason === 'auto' ? ' · nach 12 Stunden ausgeblendet' : ' · ausgeblendet') : admin && row.visibleUntil ? ` · für Gäste sichtbar bis ${new Date(row.visibleUntil).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
           </span>
         </span>
         <span aria-hidden>›</span>
@@ -166,7 +166,7 @@ export default function Home() {
     <main className="app no-tabs">
       <header style={{ padding: 'calc(22px + env(safe-area-inset-top)) 0 4px' }}>
         <h1 className="logo">Turnier<br />Manager</h1>
-        <p className="eyebrow" style={{ marginTop: 8 }}>★ EHRE, WEM EHRE GEBÜHRT ★</p>
+        <p className="eyebrow" style={{ marginTop: 8 }}>★ WER IST DER FIFA GOTT? ★</p>
       </header>
 
       {error && <p className="error" role="alert" style={{ marginTop: 14 }}>{error} <button className="link" onClick={load}>Erneut versuchen</button></p>}

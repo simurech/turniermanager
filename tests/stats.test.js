@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDoc, applyOp, applyOps, scheduleMatches } from '../src/lib/tournament.js';
+import { createDoc, applyOp, applyOps, scheduleMatches, deriveState } from '../src/lib/tournament.js';
 import {
   playerForm,
   streakLabel,
@@ -408,5 +408,39 @@ describe('Reihenfolge der K.O.-Spiele (7 Spieler, 2 Fernseher): Finale ganz zum 
     expect(ids(d)).toEqual(['third']);
     d = finish(d, 'third');
     expect(ids(d)).toEqual(['final']);
+  });
+});
+
+describe('Ewige Tabelle: zweite Plätze (Silbermedaille)', () => {
+  const finishWith = (doc) => {
+    let d = playGroup(doc, marcoWins);
+    d = applyOp(d, { type: 'startKnockout' });
+    for (const id of ['sf1', 'sf2', 'final', 'third', 'ls1', 'lf']) d = applyOp(d, { type: 'koResult', id, home: 2, away: 1 });
+    return applyOp(d, { type: 'finish' });
+  };
+
+  it('der Verlierer des Finales bekommt einen zweiten Platz', () => {
+    const a = finishWith(fresh());
+    const ranking = deriveState(a).ranking;
+    const runnerUp = a.players[ranking[1]].name;
+    const table = hallOfFame([a]);
+    expect(table.find((e) => e.name === runnerUp).seconds).toBe(1);
+    expect(table.reduce((s, e) => s + e.seconds, 0)).toBe(1);
+    expect(table.find((e) => e.name === a.players[ranking[0]].name).seconds).toBe(0);
+  });
+
+  it('zählt über mehrere Turniere und sortiert bei gleich vielen Titeln nach zweiten Plätzen', () => {
+    const a = finishWith(fresh());
+    const b = finishWith(createDoc({ name: 'B', players: players(7), config: {} }));
+    const second = a.players[deriveState(a).ranking[1]].name;
+    const table = hallOfFame([b, a]);
+    expect(table.find((e) => e.name === second).seconds).toBe(2);
+    const sameTitles = table.filter((e) => e.titles === table[0].titles);
+    for (let i = 1; i < sameTitles.length; i++) expect(sameTitles[i - 1].seconds).toBeGreaterThanOrEqual(sameTitles[i].seconds);
+  });
+
+  it('nicht abgeschlossene Turniere zählen keinen zweiten Platz', () => {
+    const table = hallOfFame([playGroup(fresh(), marcoWins)]);
+    expect(table.reduce((s, e) => s + e.seconds, 0)).toBe(0);
   });
 });

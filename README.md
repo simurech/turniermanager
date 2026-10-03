@@ -20,7 +20,7 @@ Admin-Code für die Entwicklung setzen: `php tools/set-admin.php /tmp/tm`
 ## Tests
 
 ```bash
-npm test            # 99 Unit-Tests (Logik, Statistik, Teilen, PIN-Speicher) und 22 API-Tests
+npm test            # 107 Unit-Tests (Logik, Statistik, Teilen, PIN-Speicher) und 24 API-Tests
 npm run test:unit   # nur die Unit-Tests
 ```
 
@@ -53,6 +53,7 @@ npm run test:unit   # nur die Unit-Tests
 - Fehlversuche werden pro Besucher-Adresse und pro Turnier gezählt (10 in 10 Minuten, 30 pro Tag, 100 pro Tag insgesamt). Die Zählung ist atomar, gleichzeitige Anfragen umgehen sie nicht. Ein neuer PIN hebt die Sperre auf.
 - Erstellen ist pro Adresse (5) und insgesamt (50) pro Tag begrenzt. Der Admin ist ausgenommen. Gezählt wird die echte Adresse (`REMOTE_ADDR`), `X-Forwarded-For` wird ignoriert.
 - Leere Turniere (nie ein Ergebnis eingetragen) werden nach 60 Tagen aufgeräumt.
+- Abgeschlossene Turniere sind für Gäste 12 Stunden nach dem Abschluss in der Liste sichtbar (`finishedAt`), danach nur noch für den Admin. Der Admin blendet sie mit „Einblenden“ wieder dauerhaft ein (`pinned`). Ein erneuter Abschluss startet die 12 Stunden neu. Über den Link bleibt ein ausgeblendetes Turnier erreichbar. Die Dauer lässt sich für Tests mit `TM_FINISHED_HOURS` ändern.
 - Der Speicher liegt ausserhalb des Webroots (`../tm-private`). Ist das nicht möglich, liegt er in `public/data` mit Zugriffssperre.
 - Fotos werden serverseitig neu als JPEG kodiert (max. 1200 px). Dabei fallen EXIF-Daten wie der Standort weg.
 

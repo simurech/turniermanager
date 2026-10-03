@@ -12,6 +12,7 @@ export default function HallOfFame({ docs }) {
           <tr>
             <th scope="col">Spieler</th>
             <th scope="col" title="Turniersiege">🏆</th>
+            <th scope="col" title="Zweite Plätze">🥈</th>
             <th scope="col" title="Letzte Plätze">🍋</th>
             <th scope="col" title="Turniere">Tur.</th>
             <th scope="col" title="Siegquote">Sieg%</th>
@@ -25,6 +26,7 @@ export default function HallOfFame({ docs }) {
                 <strong>{e.name}</strong>
               </td>
               <td>{e.titles}</td>
+              <td>{e.seconds}</td>
               <td>{e.lastPlaces}</td>
               <td>{e.tournaments}</td>
               <td>{e.played ? Math.round(e.winRate * 100) : '–'}</td>

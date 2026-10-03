@@ -63,6 +63,32 @@ function env_limit(string $name, int $default): int
     return ($value !== false && ctype_digit($value)) ? (int) $value : $default;
 }
 
+/** Wie lange ein abgeschlossenes Turnier für Gäste sichtbar bleibt (Sekunden). */
+function finished_visible_seconds(): int
+{
+    return env_limit('TM_FINISHED_HOURS', 12) * 3600;
+}
+
+/** Zeitpunkt, bis zu dem ein abgeschlossenes Turnier für Gäste sichtbar ist, sonst null (unbegrenzt oder nicht abgeschlossen). */
+function visible_until(array $t): ?int
+{
+    if (($t['phase'] ?? '') !== 'finished' || !empty($t['pinned'])) {
+        return null;
+    }
+    $since = strtotime((string) ($t['finishedAt'] ?? $t['updatedAt'] ?? ''));
+    return $since === false ? null : $since + finished_visible_seconds();
+}
+
+/** Ob das Turnier in der öffentlichen Liste erscheint: nicht manuell versteckt und, wenn abgeschlossen, nicht länger als 12 Stunden her. */
+function is_public(array $t): bool
+{
+    if (!empty($t['hidden'])) {
+        return false;
+    }
+    $until = visible_until($t);
+    return $until === null || time() < $until;
+}
+
 function fail(int $status, string $message, array $extra = []): never
 {
     http_response_code($status);
@@ -512,7 +538,11 @@ function summary(array $t, bool $isAdmin): array
         'previousId' => $t['previousId'] ?? null,
     ];
     if ($isAdmin) {
-        $row['hidden'] = !empty($t['hidden']);
+        $public = is_public($t);
+        $until = visible_until($t);
+        $row['hidden'] = !$public;
+        $row['hiddenReason'] = $public ? null : (!empty($t['hidden']) ? 'manual' : 'auto');
+        $row['visibleUntil'] = $public && $until !== null ? date('c', $until) : null;
     }
     return $row;
 }
@@ -603,7 +633,7 @@ function action_list(): never
     cleanup_empty();
     $rows = [];
     foreach (all_tournaments() as $t) {
-        if (!empty($t['hidden']) && !$isAdmin) {
+        if (!$isAdmin && !is_public($t)) {
             continue;
         }
         $rows[] = summary($t, $isAdmin);
@@ -718,10 +748,20 @@ function action_update(): never
         if ($t['version'] !== $version) {
             fail(409, 'Das Turnier wurde inzwischen geändert', ['current' => public_view($t)]);
         }
+        $wasFinished = ($t['phase'] ?? '') === 'finished';
         foreach (DATA_KEYS as $key) {
             unset($t[$key]);
         }
         $t = $data + $t;
+        if (($t['phase'] ?? '') === 'finished') {
+            if (!$wasFinished) {
+                // Neu abgeschlossen: die 12 Stunden Sichtbarkeit beginnen jetzt, eine frühere Freigabe gilt nicht mehr
+                $t['finishedAt'] = date('c');
+                unset($t['pinned']);
+            }
+        } else {
+            unset($t['finishedAt'], $t['pinned']);
+        }
         $t['version']++;
         $t['updatedAt'] = date('c');
         write_tournament($t);
@@ -751,7 +791,13 @@ function action_admin_change(string $kind): never
             return $out;
         }
         if ($kind === 'hide') {
-            $t['hidden'] = (bool) ($body['hidden'] ?? true);
+            $hide = (bool) ($body['hidden'] ?? true);
+            $t['hidden'] = $hide;
+            if ($hide) {
+                unset($t['pinned']);
+            } elseif (($t['phase'] ?? '') === 'finished') {
+                $t['pinned'] = true; // vom Admin eingeblendet: bleibt sichtbar, auch nach Ablauf der 12 Stunden
+            }
         } elseif ($kind === 'reset_pin') {
             $out['pin'] = generate_pin();
             $t['pin'] = $out['pin'];

@@ -328,3 +328,68 @@ test('Erstellen ist pro Adresse begrenzt, der Admin nicht (Server mit echten Gre
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('abgeschlossene Turniere sind 12 Stunden für Gäste sichtbar, danach nur für den Admin, der sie wieder einblenden kann', async () => {
+  const { json: t } = await create();
+  const adminH = { 'X-Admin': ADMIN };
+  const file = join(storage, 'tournaments', `${t.id}.json`);
+  const read = () => JSON.parse(readFileSync(file, 'utf8'));
+  const age = (hours, field = 'finishedAt') => { const d = read(); d[field] = new Date(Date.now() - hours * 3600e3).toISOString(); writeFileSync(file, JSON.stringify(d)); };
+  const version = async () => (await call('load', { method: 'GET', query: `&id=${t.id}` })).json.version;
+  const guest = async () => (await call('list', { method: 'GET' })).json.tournaments.find((x) => x.id === t.id);
+  const admin = async () => (await call('list', { method: 'GET', headers: adminH })).json.tournaments.find((x) => x.id === t.id);
+  const setPhase = async (phase, headers) => call('update', { body: { id: t.id, version: await version(), data: sample({ phase, winner: phase === 'finished' ? 0 : null, loser: phase === 'finished' ? 1 : null }) }, headers });
+
+  // Abschliessen: sofort sichtbar, der Admin sieht bis wann
+  assert.equal((await setPhase('finished', { 'X-Pin': t.pin })).status, 200);
+  assert.ok(read().finishedAt, 'Abschluss-Zeitpunkt gespeichert');
+  assert.ok(await guest(), 'direkt nach dem Abschluss für Gäste sichtbar');
+  const row = await admin();
+  assert.equal(row.hidden, false);
+  const until = new Date(row.visibleUntil).getTime();
+  assert.ok(Math.abs(until - (new Date(read().finishedAt).getTime() + 12 * 3600e3)) < 60000, 'sichtbar bis 12 Stunden nach dem Abschluss');
+
+  // Kurz vor Ablauf noch sichtbar, danach weg
+  age(11.5);
+  assert.ok(await guest(), 'nach 11,5 Stunden noch sichtbar');
+  age(12.5);
+  assert.equal(await guest(), undefined, 'nach 12,5 Stunden für Gäste ausgeblendet');
+  const hidden = await admin();
+  assert.equal(hidden.hidden, true);
+  assert.equal(hidden.hiddenReason, 'auto');
+  assert.equal((await call('load', { method: 'GET', query: `&id=${t.id}` })).status, 200, 'über den Link bleibt es erreichbar');
+
+  // Admin blendet es wieder ein: bleibt dauerhaft sichtbar
+  assert.equal((await call('hide', { body: { id: t.id, hidden: false }, headers: adminH })).status, 200);
+  assert.ok(await guest(), 'nach dem Einblenden wieder sichtbar');
+  assert.equal((await admin()).visibleUntil, null);
+  age(24 * 365);
+  assert.ok(await guest(), 'auch ein Jahr später noch sichtbar');
+
+  // Wieder öffnen und neu abschliessen startet die 12 Stunden neu und hebt die Freigabe auf
+  assert.equal((await setPhase('knockout', { 'X-Pin': t.pin })).status, 200);
+  assert.equal(read().finishedAt, undefined);
+  assert.equal((await setPhase('finished', { 'X-Pin': t.pin })).status, 200);
+  assert.equal(read().pinned, undefined);
+  assert.ok(await guest());
+  age(13);
+  assert.equal(await guest(), undefined);
+
+  // Manuell ausblenden ist unabhängig davon
+  await call('hide', { body: { id: t.id, hidden: false }, headers: adminH });
+  await call('hide', { body: { id: t.id, hidden: true }, headers: adminH });
+  assert.equal(await guest(), undefined);
+  assert.equal((await admin()).hiddenReason, 'manual');
+
+  // Ältere Turniere ohne Abschluss-Zeitpunkt: es zählt die letzte Änderung
+  const d = read(); delete d.finishedAt; delete d.pinned; d.hidden = false; d.updatedAt = new Date(Date.now() - 13 * 3600e3).toISOString(); writeFileSync(file, JSON.stringify(d));
+  assert.equal(await guest(), undefined);
+});
+
+test('laufende Turniere werden nie automatisch ausgeblendet', async () => {
+  const { json: t } = await create();
+  const file = join(storage, 'tournaments', `${t.id}.json`);
+  const d = JSON.parse(readFileSync(file, 'utf8')); d.updatedAt = new Date(Date.now() - 30 * 24 * 3600e3).toISOString(); writeFileSync(file, JSON.stringify(d));
+  const list = (await call('list', { method: 'GET' })).json.tournaments;
+  assert.ok(list.some((x) => x.id === t.id));
+});
