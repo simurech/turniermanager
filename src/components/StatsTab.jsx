@@ -40,11 +40,6 @@ function Odds({ doc, history }) {
           ))}
         </tbody>
       </table>
-      <p className="small muted">
-        {odds.confidence === 0 ? 'Vor dem ersten Spiel sind alle Quoten gleich, nur der amtierende Meister und Verlierer weichen leicht ab. Mit jedem Spiel zählt die Form mehr. ' : odds.confidence < 0.5 ? 'Noch wenig Daten: Die Quoten verändern sich mit jedem Spiel. ' : ''}
-        {odds.confidence > 0 ? (history.docs.length ? `Berechnet aus diesem Turnier und ${history.docs.length} früheren. ` : 'Berechnet nur aus diesem Turnier. ') : ''}
-        Reine Spielerei, ohne Gewähr 😉
-      </p>
     </>
   );
 }
@@ -78,7 +73,6 @@ export default function StatsTab({ doc, derived, history }) {
 
       <Section>Ewige Tabelle</Section>
       {history.loading ? <p className="empty">Lädt Vorjahre …</p> : <HallOfFame docs={finishedDocs} />}
-      {!history.loading && history.docs.length === 0 && <p className="small muted" style={{ marginTop: 8 }}>Dieses Turnier hat keinen Vorgänger. Mit einem Vorjahr als Basis erscheinen hier alle Jahre und die Quoten werden genauer.</p>}
     </>
   );
 }

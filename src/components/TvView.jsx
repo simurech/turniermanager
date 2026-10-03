@@ -1,10 +1,12 @@
-import { isPlayed } from '../lib/tournament.js';
+import { allGroupPlayed, isPlayed } from '../lib/tournament.js';
 import { PHASE_LABEL, nameOf, teamOf } from '../lib/format.js';
 import { Marks } from './ui.jsx';
 
 /** Grosse Ansicht für Fernseher oder Beamer: nächstes Spiel, Tabelle und K.O.-Stand. Aktualisiert sich über das Polling. */
 export default function TvView({ doc, derived, upcoming, onExit }) {
   const finished = doc.phase === 'finished';
+  // Die Phase wechselt erst, wenn jemand die K.O.-Runde startet. Bis dahin zeigt der Titel, dass die Gruppenphase fertig ist.
+  const phaseLabel = doc.phase === 'group' && allGroupPlayed(doc) ? 'Gruppenphase beendet · K.O. startet gleich' : PHASE_LABEL[doc.phase];
   const winner = doc.players[doc.winner];
   const loser = doc.players[doc.loser];
   return (
@@ -12,7 +14,7 @@ export default function TvView({ doc, derived, upcoming, onExit }) {
       <div className="topbar">
         <div className="title">
           <span className="logo">{doc.name || 'Turnier'}</span>
-          <span className="eyebrow">{PHASE_LABEL[doc.phase].toUpperCase()}</span>
+          <span className="eyebrow">{phaseLabel.toUpperCase()}</span>
         </div>
         <button className="iconbtn" onClick={onExit} aria-label="TV-Ansicht beenden">✕</button>
       </div>
@@ -49,7 +51,7 @@ export default function TvView({ doc, derived, upcoming, onExit }) {
           return (
             <div key={r.playerId} role="row" className={`tr ${p.champion ? 'champ' : ''} ${p.loserMark ? 'lastrow' : ''}`}>
               <span className="rank">{r.rank}</span>
-              <span className="who">{p.name} <Marks player={p} /><small>{teamOf(doc, r.playerId) || ' '}</small></span>
+              <span className="who">{p.name} <Marks player={p} />{teamOf(doc, r.playerId) && <small>{teamOf(doc, r.playerId)}</small>}</span>
               <span>{r.played}</span>
               <span>{r.goalDiff > 0 ? `+${r.goalDiff}` : r.goalDiff}</span>
               <span className="pts">{r.points}</span>
