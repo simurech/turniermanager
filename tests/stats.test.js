@@ -338,3 +338,75 @@ describe('Nahtloser Wechsel bei 2 Fernsehern', () => {
     expect(next.map((m) => m.tv)).toEqual([1, 2]);
   });
 });
+
+describe('Reihenfolge der K.O.-Spiele (7 Spieler, 2 Fernseher): Finale ganz zum Schluss', () => {
+  const start = () => {
+    let d = createDoc({ name: 'T', players: players(7), config: { numTVs: 2 } });
+    d = playGroup(d, (m) => {
+      const strong = Math.min(m.homePlayer, m.awayPlayer);
+      return m.homePlayer === strong ? { home: 2, away: 0 } : { home: 0, away: 2 };
+    });
+    return applyOp(d, { type: 'startKnockout' });
+  };
+  const ids = (d) => nextMatches(d).map((m) => m.id);
+  const finish = (d, id) => {
+    const m = nextMatches(d).find((x) => x.id === id);
+    return applyOp(d, { type: 'koResult', id, home: 2, away: 1, homePlayer: m.homePlayer, awayPlayer: m.awayPlayer });
+  };
+
+  it('das zuerst gestartete Spiel wird zuerst fertig', () => {
+    let d = start();
+    expect(ids(d)).toEqual(['sf1', 'sf2']);
+    d = finish(d, 'sf1');
+    expect(ids(d)).toEqual(['sf2', 'ls1']); // das Verlierer-Halbfinale läuft sofort parallel mit
+    d = finish(d, 'sf2');
+    expect(ids(d)).toEqual(['ls1', 'third']); // ls1 bleibt sichtbar, Finale wartet
+    d = finish(d, 'ls1');
+    expect(ids(d)).toEqual(['third', 'lf']);
+    d = finish(d, 'third');
+    expect(ids(d)).toEqual(['lf']); // das Finale wartet, bis alle anderen fertig sind
+    d = finish(d, 'lf');
+    expect(ids(d)).toEqual(['final']);
+    d = finish(d, 'final');
+    expect(ids(d)).toEqual([]);
+  });
+
+  it('das später gestartete Spiel wird zuerst fertig', () => {
+    let d = start();
+    d = finish(d, 'sf2');
+    expect(ids(d)).toEqual(['sf1', 'ls1']);
+    d = finish(d, 'ls1');
+    expect(ids(d)).toEqual(['sf1', 'lf']);
+    d = finish(d, 'lf');
+    expect(ids(d)).toEqual(['sf1']);
+    d = finish(d, 'sf1');
+    expect(ids(d)).toEqual(['third']);
+    d = finish(d, 'third');
+    expect(ids(d)).toEqual(['final']);
+  });
+
+  it('das Finale läuft nie gleichzeitig mit einem anderen Spiel und es sind nie mehr als 2 aktiv', () => {
+    for (const pickLast of [false, true]) {
+      let d = start();
+      for (let i = 0; i < 10 && nextMatches(d).length; i++) {
+        const w = nextMatches(d);
+        expect(w.length).toBeLessThanOrEqual(2);
+        if (w.some((m) => m.id === 'final')) expect(w).toHaveLength(1);
+        d = finish(d, (pickLast ? w[w.length - 1] : w[0]).id);
+      }
+      expect(nextMatches(d)).toHaveLength(0);
+    }
+  });
+
+  it('mit 4 Spielern: Halbfinals, Platz 3, dann das Finale allein', () => {
+    let d = createDoc({ name: 'T', players: players(4), config: { numTVs: 2 } });
+    d = playGroup(d, (m) => ({ home: m.homePlayer < m.awayPlayer ? 2 : 0, away: m.homePlayer < m.awayPlayer ? 0 : 2 }));
+    d = applyOp(d, { type: 'startKnockout' });
+    expect(ids(d)).toEqual(['sf1', 'sf2']);
+    d = finish(d, 'sf1');
+    d = finish(d, 'sf2');
+    expect(ids(d)).toEqual(['third']);
+    d = finish(d, 'third');
+    expect(ids(d)).toEqual(['final']);
+  });
+});

@@ -400,6 +400,8 @@ export function computeStandings(players, matches, tiebreaker = 'goalDiff') {
  *   8 Spieler: Verlierer-Halbfinale 5 gegen 8 und 6 gegen 7. Die beiden Verlierer spielen das Verlierer-Final.
  * Wer das Verlierer-Final verliert, ist der Turnier-Verlierer.
  */
+const PLAY_ORDER = ['sf1', 'sf2', 'ls1', 'ls2', 'third', 'lf', 'final'];
+
 export function knockoutSlots(numPlayers, config = DEFAULT_CONFIG) {
   const slots = [
     { id: 'sf1', type: 'semi', label: 'Halbfinale 1' },
@@ -419,7 +421,8 @@ export function knockoutSlots(numPlayers, config = DEFAULT_CONFIG) {
     slots.push({ id: 'ls2', type: 'loserSemi', label: 'Verlierer-Halbfinale 2' });
     slots.push({ id: 'lf', type: 'loserFinal', label: 'Verlierer-Final', placeholders: { home: 'Verlierer Verl.-Halbfinale 1', away: 'Verlierer Verl.-Halbfinale 2' } });
   }
-  return slots;
+  // Spielreihenfolge: Halbfinals, Verlierer-Halbfinals (laufen parallel mit), Platz 3, Verlierer-Final, Finale zum Schluss
+  return slots.sort((a, b) => PLAY_ORDER.indexOf(a.id) - PLAY_ORDER.indexOf(b.id));
 }
 
 const winnerOf = (m) => (m.homeGoals > m.awayGoals ? m.homePlayer : m.awayPlayer);

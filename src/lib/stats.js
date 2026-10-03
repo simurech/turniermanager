@@ -299,7 +299,7 @@ export function roundPercents(values) {
 
 /**
  * Die Spiele, die als Nächstes gleichzeitig laufen: bei 2 Fernsehern immer die nächsten zwei offenen.
- * Gruppenphase: die ersten offenen Spiele der Spielreihenfolge. K.O.: die bereiten, noch offenen Spiele.
+ * Gruppenphase: die ersten offenen Spiele der Spielreihenfolge. K.O.: die bereiten, noch offenen Spiele in Spielreihenfolge, das Finale als letztes und allein.
  */
 export function nextMatches(doc) {
   const tvs = doc.config?.numTVs || 1;
@@ -307,7 +307,11 @@ export function nextMatches(doc) {
     // Die ersten offenen Spiele der Spielreihenfolge: wird eines fertig, rückt sofort das nächste nach
     return (doc.matches || []).filter((m) => !isPlayed(m)).sort((a, b) => a.id - b.id).slice(0, tvs).sort((a, b) => a.tv - b.tv);
   }
-  if (doc.phase === 'knockout') return knockoutOf(doc).filter((m) => m.ready && !m.done).slice(0, tvs);
+  if (doc.phase === 'knockout') {
+    const open = knockoutOf(doc).filter((m) => !m.done);
+    // Das Finale läuft ganz zum Schluss und allein, erst wenn alle anderen K.O.-Spiele gespielt sind
+    return open.filter((m) => m.ready && (m.id !== 'final' || open.length === 1)).slice(0, tvs);
+  }
   return [];
 }
 

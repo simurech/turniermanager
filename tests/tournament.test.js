@@ -162,7 +162,7 @@ function playKnockout(n, { homeWins = true, third = true } = {}) {
 
 describe('K.O.-Runde', () => {
   it('Slots: 4 Spieler ohne Verlierer-Runde, mit und ohne Platz 3', () => {
-    expect(knockoutSlots(4, cfg()).map((s) => s.id)).toEqual(['sf1', 'sf2', 'final', 'third']);
+    expect(knockoutSlots(4, cfg()).map((s) => s.id)).toEqual(['sf1', 'sf2', 'third', 'final']);
     expect(knockoutSlots(4, cfg({ thirdPlacePlayoff: false })).map((s) => s.id)).toEqual(['sf1', 'sf2', 'final']);
   });
 
