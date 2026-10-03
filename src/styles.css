@@ -148,8 +148,9 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .player-row .input { box-shadow: none; min-height: 44px; padding: 8px 10px; }
 .check { width: 36px; height: 36px; border: 2.5px solid var(--ink); border-radius: 6px; background: var(--paper2); font-size: 20px; line-height: 1; display: grid; place-items: center; }
 .check[aria-pressed='true'] { background: var(--green); color: var(--paper); }
-.marks { display: flex; gap: 6px; flex-wrap: wrap; }
-.mark { border: 2px solid var(--ink); background: var(--paper2); border-radius: 16px; padding: 6px 12px; font-size: 14px; min-height: 36px; }
+.namerow { display: grid; grid-template-columns: 1fr 44px 44px; gap: 6px; }
+.mark { border: 2px solid var(--ink); background: var(--paper2); border-radius: 6px; font-size: 20px; width: 44px; height: 44px; display: grid; place-items: center; filter: grayscale(1); opacity: 0.7; }
+.mark[aria-pressed='true'] { filter: none; opacity: 1; }
 .mark[aria-pressed='true'] { background: var(--mustard); }
 .mark.lose[aria-pressed='true'] { background: var(--red); color: var(--paper); }
 
@@ -219,3 +220,14 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @media print { .tabbar, .iconbtn, .btn { display: none; } }
+
+/* TV-/Beamer-Ansicht */
+.app.tv { max-width: 1100px; font-size: 22px; }
+.tv .logo { font-size: clamp(32px, 5vw, 56px); }
+.tv .banner .vs b { font-size: clamp(26px, 5vw, 52px); }
+.tv .banner .vs i { font-size: clamp(36px, 6vw, 64px); }
+.tv .tbl .th, .tv .tbl .tr { grid-template-columns: 48px 1fr 56px 64px 64px; padding: 16px 20px; font-size: clamp(20px, 3vw, 30px); }
+.tv .tbl .pts { font-size: clamp(24px, 3.5vw, 36px); }
+.tv .tbl .who small { font-size: 0.6em; }
+.tv-ko { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.tv-ko .card { margin: 0 4px 4px 0; font-size: 20px; }

@@ -120,10 +120,10 @@ export function ResultSheet({ home, away, initial, knockout = false, onSave, onC
         {value}
       </div>
       <div className="pm">
-        <button type="button" onClick={() => set(clamp(value - 1))} aria-label={`${name} minus ein Tor`} disabled={value === 0}>
+        <button type="button" onClick={() => set((v) => clamp(v - 1))} aria-label={`${name} minus ein Tor`} disabled={value === 0}>
           −
         </button>
-        <button type="button" onClick={() => set(clamp(value + 1))} aria-label={`${name} plus ein Tor`}>
+        <button type="button" onClick={() => set((v) => clamp(v + 1))} aria-label={`${name} plus ein Tor`}>
           +
         </button>
       </div>

@@ -120,22 +120,23 @@ function tally(playerIds, matches) {
   return [...rows.values()];
 }
 
-const byOverall = (nameOf) => (a, b) =>
+// Letztes Kriterium ist die Reihenfolge der Eingabe, damit die Tabelle vor dem ersten Spiel
+// in der gewohnten Spielerreihenfolge steht.
+const byOverall = () => (a, b) =>
   b.goalDiff - a.goalDiff ||
   b.goalsFor - a.goalsFor ||
   a.goalsAgainst - b.goalsAgainst ||
   b.won - a.won ||
   a.lost - b.lost ||
-  nameOf(a.playerId).localeCompare(nameOf(b.playerId), 'de');
+  a.playerId - b.playerId;
 
 /**
  * Tabelle nach Punkten. Bei Punktgleichheit entweder direkter Vergleich als Mini-Tabelle
  * (tiebreaker 'head2head') und danach Tordifferenz, Tore, Gegentore, Siege, Niederlagen, Name.
  */
 export function computeStandings(players, matches, tiebreaker = 'goalDiff') {
-  const nameOf = (id) => players[id]?.name || '';
   const rows = tally(players.map((_, i) => i), matches);
-  const overall = byOverall(nameOf);
+  const overall = byOverall();
 
   const groups = new Map();
   for (const r of rows) {

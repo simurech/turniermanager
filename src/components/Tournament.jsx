@@ -11,6 +11,7 @@ import { Dots, Marks, Section, Segmented, Skeletons } from './ui.jsx';
 import { ConfirmDialog, PinDialog, ResultSheet } from './Dialogs.jsx';
 import StatsTab from './StatsTab.jsx';
 import Finished from './Finished.jsx';
+import TvView from './TvView.jsx';
 
 const TABS = [
   { id: 'table', icon: '📊', label: 'TABELLE' },
@@ -110,6 +111,7 @@ export default function Tournament({ id }) {
   const [sheet, setSheet] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [justPin, setJustPin] = useState(() => takeJustCreated(id));
+  const [tv, setTv] = useState(() => new URLSearchParams(window.location.search).has('tv'));
   const [, forceRender] = useState(0);
   const initialTab = useRef(false);
 
@@ -140,6 +142,11 @@ export default function Tournament({ id }) {
         <button className="btn" onClick={() => (status === 'error' ? window.location.reload() : navigate('/'))}>{status === 'error' ? 'Neu laden' : 'Zur Startseite'}</button>
       </main>
     );
+  }
+
+  const nextForTv = doc.phase === 'group' ? nextGroupMatch(doc) : derived.knockout.find((m) => m.ready && !m.done) || null;
+  if (tv) {
+    return <TvView doc={doc} derived={derived} nextMatch={nextForTv} onExit={() => { window.history.replaceState({}, '', `/t/${id}`); setTv(false); }} />;
   }
 
   const requireEdit = (fn) => (canEdit ? fn() : setPinDialog({ after: fn }));
@@ -197,6 +204,7 @@ export default function Tournament({ id }) {
           <span className="logo">{doc.name || 'Turnier'}</span>
           <span className="eyebrow">CODE {id} · {PHASE_LABEL[doc.phase].toUpperCase()}</span>
         </div>
+        <button className="iconbtn" onClick={() => { window.history.replaceState({}, '', `/t/${id}?tv=1`); setTv(true); }} aria-label="TV-Ansicht">📺</button>
         <button className="iconbtn" onClick={share} aria-label="Teilen">📤</button>
       </div>
 

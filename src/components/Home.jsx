@@ -171,7 +171,7 @@ export default function Home() {
     <main className="app no-tabs">
       <header style={{ padding: 'calc(22px + env(safe-area-inset-top)) 0 4px' }}>
         <h1 className="logo">Turnier<br />Manager</h1>
-        <p className="eyebrow" style={{ marginTop: 8 }}>★ DIE JÄHRLICHE ENTSCHEIDUNG ★</p>
+        <p className="eyebrow" style={{ marginTop: 8 }}>★ EHRE, WEM EHRE GEBÜHRT ★</p>
       </header>
 
       {error && <p className="error" role="alert" style={{ marginTop: 14 }}>{error} <button className="link" onClick={load}>Erneut versuchen</button></p>}

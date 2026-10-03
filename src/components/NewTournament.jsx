@@ -117,20 +117,19 @@ export default function NewTournament() {
         )}
 
         <Section>Spieler ({selected.length})</Section>
+        <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>✓ = spielt mit · 👑 amtierender Meister · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
         {rows.map((r, i) => (
           <div key={r.key} className={`player-row ${r.selected ? '' : 'off'}`}>
             <button type="button" className="check" aria-pressed={r.selected} aria-label={`Spieler ${i + 1} dabei`} onClick={() => update(r.key, { selected: !r.selected })}>
               {r.selected ? '✓' : ''}
             </button>
             <div className="fields">
-              <input className="input" placeholder={`Spieler ${i + 1}`} aria-label={`Name Spieler ${i + 1}`} value={r.name} maxLength={30} onChange={(e) => update(r.key, { name: e.target.value })} />
+              <div className="namerow">
+                <input className="input" placeholder={`Spieler ${i + 1}`} aria-label={`Name Spieler ${i + 1}`} value={r.name} maxLength={30} onChange={(e) => update(r.key, { name: e.target.value })} />
+                <button type="button" className="mark" aria-pressed={r.champion} aria-label={`Spieler ${i + 1} ist amtierender Meister`} title="Amtierender Meister" onClick={() => setMark(r.key, 'champion')}>👑</button>
+                <button type="button" className="mark lose" aria-pressed={r.loserMark} aria-label={`Spieler ${i + 1} ist amtierender Verlierer`} title="Amtierender Verlierer" onClick={() => setMark(r.key, 'loserMark')}>🍋</button>
+              </div>
               <input className="input" placeholder="Team (optional)" aria-label={`Team Spieler ${i + 1}`} value={r.team} maxLength={30} onChange={(e) => update(r.key, { team: e.target.value })} />
-              {r.selected && (
-                <div className="marks">
-                  <button type="button" className="mark" aria-pressed={r.champion} onClick={() => setMark(r.key, 'champion')}>👑 Amtierender Meister</button>
-                  <button type="button" className="mark lose" aria-pressed={r.loserMark} onClick={() => setMark(r.key, 'loserMark')}>🍋 Amtierender Verlierer</button>
-                </div>
-              )}
             </div>
           </div>
         ))}

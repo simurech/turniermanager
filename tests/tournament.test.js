@@ -110,9 +110,9 @@ describe('Tabelle', () => {
     expect(h[2]).toBe(0);
   });
 
-  it('ist ein stabiler Alphabet-Fallback bei völligem Gleichstand', () => {
+  it('bei völligem Gleichstand gilt die Reihenfolge der Eingabe', () => {
     const t = computeStandings([{ name: 'Zoe' }, { name: 'Adam' }], []);
-    expect(t.map((r) => r.playerId)).toEqual([1, 0]);
+    expect(t.map((r) => r.playerId)).toEqual([0, 1]);
   });
 });
 
