@@ -151,7 +151,7 @@ describe('Hall of Fame', () => {
     const finish = (doc) => {
       let d = playGroup(doc, marcoWins);
       d = applyOp(d, { type: 'startKnockout' });
-      for (const id of ['sf1', 'sf2', 'final', 'third', 'lad1', 'lad2']) d = applyOp(d, { type: 'koResult', id, home: 2, away: 1 });
+      for (const id of ['sf1', 'sf2', 'final', 'third', 'ls1', 'lf']) d = applyOp(d, { type: 'koResult', id, home: 2, away: 1 });
       return applyOp(d, { type: 'finish' });
     };
     const a = finish(fresh());

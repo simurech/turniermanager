@@ -167,20 +167,32 @@ export function computeStandings(players, matches, tiebreaker = 'goalDiff') {
 // ------------------------------------------------------------------ K.O.-Runde
 
 /**
- * Format: Halbfinale (1-4, 2-3), Finale, optional Spiel um Platz 3. Ab 6 Spielern eine Leiter für
- * die Plätze 5 bis n: die zwei Letzten spielen, der Gewinner trifft auf den nächsthöheren Rang usw.
- * Der Verlierer des ersten Leiter-Spiels ist Letzter.
+ * Format: Halbfinale (1-4, 2-3), Finale, optional Spiel um Platz 3.
+ * Verlierer-Runde für die Plätze 5 bis n der Gruppentabelle:
+ *   5 Spieler: keine, Platz 5 ist Letzter.
+ *   6 Spieler: Verlierer-Final 5 gegen 6.
+ *   7 Spieler: Verlierer-Halbfinale 5 gegen 6. Der Verlierer muss im Verlierer-Final gegen Platz 7 antreten.
+ *   8 Spieler: Verlierer-Halbfinale 5 gegen 8 und 6 gegen 7. Die beiden Verlierer spielen das Verlierer-Final.
+ * Wer das Verlierer-Final verliert, ist der Turnier-Verlierer.
  */
 export function knockoutSlots(numPlayers, config = DEFAULT_CONFIG) {
   const slots = [
     { id: 'sf1', type: 'semi', label: 'Halbfinale 1' },
     { id: 'sf2', type: 'semi', label: 'Halbfinale 2' },
-    { id: 'final', type: 'final', label: 'Finale' },
+    { id: 'final', type: 'final', label: 'Finale', placeholders: { home: 'Sieger Halbfinale 1', away: 'Sieger Halbfinale 2' } },
   ];
-  if (config.thirdPlacePlayoff) slots.push({ id: 'third', type: 'third', label: 'Spiel um Platz 3' });
-  for (let k = 1; k <= numPlayers - 5; k++) {
-    const lowestPlace = numPlayers - k + 1; // Platz, den der Verlierer belegt
-    slots.push({ id: `lad${k}`, type: 'ladder', label: `Spiel um Platz ${lowestPlace}`, place: lowestPlace });
+  if (config.thirdPlacePlayoff) {
+    slots.push({ id: 'third', type: 'third', label: 'Spiel um Platz 3', placeholders: { home: 'Verlierer Halbfinale 1', away: 'Verlierer Halbfinale 2' } });
+  }
+  if (numPlayers === 6) {
+    slots.push({ id: 'lf', type: 'loserFinal', label: 'Verlierer-Final' });
+  } else if (numPlayers === 7) {
+    slots.push({ id: 'ls1', type: 'loserSemi', label: 'Verlierer-Halbfinale' });
+    slots.push({ id: 'lf', type: 'loserFinal', label: 'Verlierer-Final', placeholders: { home: 'Verlierer Verlierer-Halbfinale' } });
+  } else if (numPlayers >= 8) {
+    slots.push({ id: 'ls1', type: 'loserSemi', label: 'Verlierer-Halbfinale 1' });
+    slots.push({ id: 'ls2', type: 'loserSemi', label: 'Verlierer-Halbfinale 2' });
+    slots.push({ id: 'lf', type: 'loserFinal', label: 'Verlierer-Final', placeholders: { home: 'Verlierer Verl.-Halbfinale 1', away: 'Verlierer Verl.-Halbfinale 2' } });
   }
   return slots;
 }
@@ -229,11 +241,15 @@ export function resolveKnockout(standings, config, stored = []) {
   make(slot('final'), sf1.winner, sf2.winner);
   if (config.thirdPlacePlayoff) make(slot('third'), sf1.loser, sf2.loser);
 
-  let carry = null;
-  for (let k = 1; k <= n - 5; k++) {
-    const s = slot(`lad${k}`);
-    const m = k === 1 ? make(s, seed(n - 2), seed(n - 1)) : make(s, carry, seed(n - k - 1));
-    carry = m.winner;
+  if (n === 6) {
+    make(slot('lf'), seed(4), seed(5));
+  } else if (n === 7) {
+    const ls1 = make(slot('ls1'), seed(4), seed(5));
+    make(slot('lf'), ls1.loser, seed(6));
+  } else if (n >= 8) {
+    const ls1 = make(slot('ls1'), seed(4), seed(7));
+    const ls2 = make(slot('ls2'), seed(5), seed(6));
+    make(slot('lf'), ls1.loser, ls2.loser);
   }
   return slots.map((s) => out.get(s.id));
 }
@@ -243,18 +259,19 @@ export function computeRanking(standings, knockout, config) {
   const n = standings.length;
   if (n < 4 || knockout.some((m) => !m.done)) return null;
   const k = Object.fromEntries(knockout.map((m) => [m.id, m]));
+  const rankOf = (id) => standings.findIndex((r) => r.playerId === id);
+  const byGroupRank = (a, b) => rankOf(a) - rankOf(b);
   const ranking = [k.final.winner, k.final.loser];
   if (config.thirdPlacePlayoff) {
     ranking.push(k.third.winner, k.third.loser);
   } else {
-    const rankOf = (id) => standings.findIndex((r) => r.playerId === id);
-    ranking.push(...[k.sf1.loser, k.sf2.loser].sort((a, b) => rankOf(a) - rankOf(b)));
+    ranking.push(...[k.sf1.loser, k.sf2.loser].sort(byGroupRank));
   }
+  // Wer die Verlierer-Runde nicht verloren hat, ist sicher und steht vor den Spielern des Verlierer-Finals.
   if (n === 5) ranking.push(standings[4].playerId);
-  if (n >= 6) {
-    ranking.push(k[`lad${n - 5}`].winner);
-    for (let i = n - 5; i >= 1; i--) ranking.push(k[`lad${i}`].loser);
-  }
+  if (n === 6) ranking.push(k.lf.winner, k.lf.loser);
+  if (n === 7) ranking.push(k.ls1.winner, k.lf.winner, k.lf.loser);
+  if (n >= 8) ranking.push(...[k.ls1.winner, k.ls2.winner].sort(byGroupRank), k.lf.winner, k.lf.loser);
   return ranking;
 }
 

@@ -22,18 +22,11 @@ const TABS = [
 
 const SYNC_TEXT = { saving: 'Speichert …', offline: 'Offline – neuer Versuch', auth: 'PIN nötig', error: 'Fehler beim Speichern' };
 
-function placeholder(slot, side) {
-  if (slot.id === 'final') return `Sieger Halbfinale ${side === 'home' ? 1 : 2}`;
-  if (slot.id === 'third') return `Verlierer Halbfinale ${side === 'home' ? 1 : 2}`;
-  if (slot.type === 'ladder') return `Sieger Spiel um Platz ${slot.place + 1}`;
-  return '?';
-}
-
 function MatchButton({ doc, m, onClick, locked = false, tvInfo = false }) {
   const done = isPlayed(m);
   const homeWin = done && m.homeGoals > m.awayGoals;
   const awayWin = done && m.awayGoals > m.homeGoals;
-  const side = (index, other) => (index == null ? { name: placeholder(m, other), team: '' } : { name: nameOf(doc, index), team: teamOf(doc, index) });
+  const side = (index, other) => (index == null ? { name: m.placeholders?.[other] ?? '?', team: '' } : { name: nameOf(doc, index), team: teamOf(doc, index) });
   const home = side(m.homePlayer, 'home');
   const away = side(m.awayPlayer, 'away');
   return (
@@ -193,7 +186,7 @@ export default function Tournament({ id }) {
   const koGroups = [
     ['Halbfinale', koList.filter((m) => m.type === 'semi')],
     ['Finale und Platz 3', koList.filter((m) => m.type === 'final' || m.type === 'third')],
-    ['Plätze 5 bis ' + doc.players.length, koList.filter((m) => m.type === 'ladder')],
+    ['Verlierer-Runde', koList.filter((m) => m.type === 'loserSemi' || m.type === 'loserFinal')],
   ].filter(([, list]) => list.length);
 
   return (

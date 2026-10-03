@@ -41,8 +41,9 @@ npm run test:unit   # nur die Unit-Tests
 ## Spielregeln im Code
 
 - **Tabelle:** 3 Punkte pro Sieg, 1 pro Remis. Bei Punktgleichheit entweder Tordifferenz oder direkter Vergleich (Mini-Tabelle), danach Tore, Gegentore, Siege, Niederlagen und die Eingabereihenfolge.
-- **K.O.:** Halbfinale 1 gegen 4 und 2 gegen 3, Finale, optional Spiel um Platz 3. Ab 6 Spielern eine Leiter für die Plätze 5 bis n: Die zwei Letzten spielen, der Sieger trifft auf den nächsthöheren Rang und so weiter. Unentschieden gibt es im K.O. nicht.
-- **Verlierer** ist der Spieler auf dem letzten Platz der Endrangliste.
+- **K.O.:** Halbfinale 1 gegen 4 und 2 gegen 3, Finale, optional Spiel um Platz 3. Unentschieden gibt es im K.O. nicht.
+- **Verlierer-Runde** (Plätze 5 bis n der Gruppentabelle): Bei 7 Spielern spielen Platz 5 und 6 gegeneinander. Der **Verlierer** dieses Spiels muss im **Verlierer-Final** gegen Platz 7 antreten. Bei 6 Spielern spielen 5 und 6 direkt das Verlierer-Final. Bei 8 Spielern gibt es zwei Verlierer-Halbfinals (5 gegen 8, 6 gegen 7), deren Verlierer das Verlierer-Final spielen. Bei 5 Spielern gibt es keine Verlierer-Runde.
+- **Turnier-Verlierer** ist, wer das Verlierer-Final verliert (letzter Platz der Endrangliste).
 - **Änderungen nach dem K.O.-Start:** K.O.-Ergebnisse gelten nur, solange dieselben zwei Spieler antreten. Sonst werden sie als veraltet markiert und müssen neu eingetragen werden.
 - **Quoten:** Das Restturnier wird 1500-mal mit Poisson-verteilten Toren simuliert. Quote = 0.92 / Wahrscheinlichkeit. Vorjahre zählen schwächer als das laufende Turnier.
 

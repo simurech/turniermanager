@@ -119,77 +119,106 @@ describe('Tabelle', () => {
 // Standings für KO-Tests: Spieler 0..n-1 in dieser Rangfolge
 const seeded = (n) => Array.from({ length: n }, (_, i) => ({ playerId: i, rank: i + 1 }));
 
+/** Spielt alle K.O.-Spiele nacheinander. `homeWins` bestimmt, ob immer die Heim- oder die Auswärtsseite gewinnt. */
+function playKnockout(n, { homeWins = true, third = true } = {}) {
+  const c = cfg({ thirdPlacePlayoff: third });
+  const standings = seeded(n);
+  const stored = [];
+  const order = [];
+  for (let guard = 0; guard < 20; guard++) {
+    const next = resolveKnockout(standings, c, stored).find((m) => m.ready && !m.done);
+    if (!next) break;
+    order.push(next.id);
+    stored.push({ id: next.id, home: next.homePlayer, away: next.awayPlayer, homeGoals: homeWins ? 2 : 1, awayGoals: homeWins ? 1 : 2 });
+  }
+  const ko = resolveKnockout(standings, c, stored);
+  return { standings, ko, order, ranking: computeRanking(standings, ko, c) };
+}
+
 describe('K.O.-Runde', () => {
-  it('Slots: 4 Spieler ohne Leiter, mit/ohne Platz 3', () => {
+  it('Slots: 4 Spieler ohne Verlierer-Runde, mit und ohne Platz 3', () => {
     expect(knockoutSlots(4, cfg()).map((s) => s.id)).toEqual(['sf1', 'sf2', 'final', 'third']);
     expect(knockoutSlots(4, cfg({ thirdPlacePlayoff: false })).map((s) => s.id)).toEqual(['sf1', 'sf2', 'final']);
   });
 
-  it('Leiter: 5 Spieler 0, 6 -> 1, 7 -> 2, 8 -> 3 Spiele', () => {
-    const lad = (n) => knockoutSlots(n, cfg()).filter((s) => s.type === 'ladder').length;
-    expect([4, 5, 6, 7, 8].map(lad)).toEqual([0, 0, 1, 2, 3]);
+  it('Verlierer-Runde: 5 Spieler keine, 6 -> 1, 7 -> 2, 8 -> 3 Spiele', () => {
+    const count = (n) => knockoutSlots(n, cfg()).filter((s) => s.type === 'loserSemi' || s.type === 'loserFinal').length;
+    expect([4, 5, 6, 7, 8].map(count)).toEqual([0, 0, 1, 2, 3]);
   });
 
-  it('Halbfinale 1-4 und 2-3, Finale offen bis beide Halbfinals gespielt', () => {
-    const k = resolveKnockout(seeded(7), cfg(), []);
-    const by = Object.fromEntries(k.map((m) => [m.id, m]));
+  it('7 Spieler: Halbfinale 1-4 und 2-3, Verlierer-Halbfinale 5-6, Platz 7 wartet', () => {
+    const by = Object.fromEntries(resolveKnockout(seeded(7), cfg(), []).map((m) => [m.id, m]));
     expect([by.sf1.homePlayer, by.sf1.awayPlayer]).toEqual([0, 3]);
     expect([by.sf2.homePlayer, by.sf2.awayPlayer]).toEqual([1, 2]);
     expect(by.final.ready).toBe(false);
-    expect([by.lad1.homePlayer, by.lad1.awayPlayer]).toEqual([5, 6]);
-    expect(by.lad2.ready).toBe(false);
+    expect([by.ls1.homePlayer, by.ls1.awayPlayer]).toEqual([4, 5]);
+    expect(by.lf.ready).toBe(false);
+    expect(by.lf.awayPlayer).toBe(6);
   });
 
-  it('Rangliste für 8 Spieler ist vollständig und sinnvoll', () => {
-    const standings = seeded(8);
-    let stored = [];
-    const play = (id, hg, ag) => {
-      const m = resolveKnockout(standings, cfg(), stored).find((x) => x.id === id);
-      expect(m.ready).toBe(true);
-      stored = [...stored, { id, home: m.homePlayer, away: m.awayPlayer, homeGoals: hg, awayGoals: ag }];
-    };
-    play('sf1', 2, 1); // 0 schlägt 3
-    play('sf2', 0, 1); // 2 schlägt 1
-    play('final', 3, 0); // 0 Meister
-    play('third', 0, 2); // 3 holt Platz 3 (home=1, away=3)
-    play('lad1', 1, 0); // 6 schlägt 7 -> 7 Letzter
-    play('lad2', 0, 1); // 5 schlägt 6
-    play('lad3', 2, 3); // 4 verliert gegen 5? home=5? siehe unten
-    const k = resolveKnockout(standings, cfg(), stored);
-    expect(k.every((m) => m.done)).toBe(true);
-    const ranking = computeRanking(standings, k, cfg());
+  it('7 Spieler: der Verlierer von 5 gegen 6 muss gegen Platz 7 ran, dessen Verlierer ist Turnier-Verlierer', () => {
+    const { standings, ko, ranking } = playKnockout(7, { homeWins: true });
+    const by = Object.fromEntries(ko.map((m) => [m.id, m]));
+    // Heimsieg: Platz 5 (Index 4) gewinnt gegen Platz 6 (Index 5), Platz 6 muss gegen Platz 7 (Index 6)
+    expect(by.ls1.winner).toBe(4);
+    expect([by.lf.homePlayer, by.lf.awayPlayer]).toEqual([5, 6]);
+    expect(by.lf.loser).toBe(6);
+    expect(ranking).toHaveLength(7);
+    expect(new Set(ranking).size).toBe(7);
+    expect(ranking.slice(4)).toEqual([4, 5, 6]);
+    expect(ranking[6]).toBe(6);
+    expect(standings).toHaveLength(7);
+  });
+
+  it('7 Spieler, Auswärtssiege: Verlierer wechselt entsprechend', () => {
+    const { ko, ranking } = playKnockout(7, { homeWins: false });
+    const by = Object.fromEntries(ko.map((m) => [m.id, m]));
+    expect(by.ls1.winner).toBe(5);
+    expect([by.lf.homePlayer, by.lf.awayPlayer]).toEqual([4, 6]);
+    expect(by.lf.loser).toBe(4); // Auswärtsseite gewinnt, also verliert Platz 5
+    expect(ranking[6]).toBe(4);
+    expect(new Set(ranking).size).toBe(7);
+  });
+
+  it('6 Spieler: Verlierer-Final 5 gegen 6, Verlierer ist Letzter', () => {
+    const { ranking, order } = playKnockout(6);
+    expect(order).toContain('lf');
+    expect(ranking.slice(4)).toEqual([4, 5]);
+  });
+
+  it('8 Spieler: zwei Verlierer-Halbfinals, Verlierer spielen das Verlierer-Final', () => {
+    const { ko, ranking } = playKnockout(8);
+    const by = Object.fromEntries(ko.map((m) => [m.id, m]));
+    expect([by.ls1.homePlayer, by.ls1.awayPlayer]).toEqual([4, 7]);
+    expect([by.ls2.homePlayer, by.ls2.awayPlayer]).toEqual([5, 6]);
+    expect([by.lf.homePlayer, by.lf.awayPlayer]).toEqual([7, 6]);
     expect(ranking).toHaveLength(8);
     expect(new Set(ranking).size).toBe(8);
-    expect(ranking[0]).toBe(0);
-    expect(ranking[7]).toBe(7);
+    expect(ranking.slice(4, 6)).toEqual([4, 5]); // sichere Spieler zuerst, nach Gruppenrang
+    expect(ranking[7]).toBe(by.lf.loser);
   });
 
-  it('Rangliste für 5 Spieler: Platz 5 = Gruppenletzter', () => {
-    const standings = seeded(5);
-    const stored = [];
-    const add = (id, hg, ag) => {
-      const m = resolveKnockout(standings, cfg({ thirdPlacePlayoff: false }), stored).find((x) => x.id === id);
-      stored.push({ id, home: m.homePlayer, away: m.awayPlayer, homeGoals: hg, awayGoals: ag });
-    };
-    add('sf1', 1, 0);
-    add('sf2', 0, 1);
-    add('final', 1, 0);
-    const k = resolveKnockout(standings, cfg({ thirdPlacePlayoff: false }), stored);
-    const ranking = computeRanking(standings, k, cfg({ thirdPlacePlayoff: false }));
+  it('5 Spieler: Platz 5 ist Letzter, ohne Spiel um Platz 3', () => {
+    const { ranking, order } = playKnockout(5, { third: false });
+    expect(order).toEqual(['sf1', 'sf2', 'final']);
     expect(ranking).toHaveLength(5);
     expect(ranking[4]).toBe(4);
   });
 
+  it('4 Spieler ohne Spiel um Platz 3: Verlierer der Halbfinals nach Gruppenrang', () => {
+    const { ranking } = playKnockout(4, { third: false });
+    expect(ranking).toHaveLength(4);
+    expect(ranking[3]).toBe(3); // Halbfinal-Verlierer mit dem schlechteren Gruppenrang ist Letzter
+  });
+
   it('Unentschieden im K.O. zählt nicht', () => {
-    const standings = seeded(4);
-    const m = resolveKnockout(standings, cfg(), [{ id: 'sf1', home: 0, away: 3, homeGoals: 1, awayGoals: 1 }]);
+    const m = resolveKnockout(seeded(4), cfg(), [{ id: 'sf1', home: 0, away: 3, homeGoals: 1, awayGoals: 1 }]);
     expect(m.find((x) => x.id === 'sf1').done).toBe(false);
   });
 
   it('geändertes Gruppenergebnis macht K.O.-Ergebnis veraltet statt es still zu löschen', () => {
-    const standings = seeded(4);
     const stored = [{ id: 'sf1', home: 1, away: 3, homeGoals: 2, awayGoals: 0 }]; // früher andere Paarung
-    const sf1 = resolveKnockout(standings, cfg(), stored).find((x) => x.id === 'sf1');
+    const sf1 = resolveKnockout(seeded(4), cfg(), stored).find((x) => x.id === 'sf1');
     expect(sf1.done).toBe(false);
     expect(sf1.stale).toBe(true);
   });
