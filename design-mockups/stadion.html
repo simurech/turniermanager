@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup – Stadion-Look</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e13;--card:#121821;--card2:#19212d;--line:#243040;--tx:#eef2f7;--mut:#8a97a8;--acc:#c6ff3d;--gold:#ffc83d;--red:#ff5a5f;--grn:#38d67a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05080b;color:var(--tx);font-family:Inter,system-ui,sans-serif;padding:32px 16px;display:flex;flex-wrap:wrap;gap:32px;justify-content:center}
+.cap{width:100%;text-align:center;color:#6b788a;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.phone{width:390px;height:800px;background:var(--bg);border-radius:44px;border:10px solid #1b232e;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 30px 80px #000a}
+.status{height:34px;display:flex;justify-content:space-between;align-items:center;padding:0 26px;font-size:12px;font-weight:600;color:var(--mut)}
+.scroll{flex:1;overflow:hidden;padding:6px 16px 0}
+h1{font-family:'Barlow Condensed';font-weight:800;font-size:34px;letter-spacing:.01em;text-transform:uppercase;line-height:1}
+h2{font-family:'Barlow Condensed';font-weight:700;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:20px 0 10px}
+.live{display:inline-flex;align-items:center;gap:6px;background:#ff5a5f22;color:var(--red);font-weight:700;font-size:11px;letter-spacing:.1em;padding:4px 9px;border-radius:99px}
+.live:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--red)}
+.hero{background:linear-gradient(160deg,#1c2a1a,#121821 60%);border:1px solid #2c3d28;border-radius:22px;padding:18px;margin-top:14px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:radial-gradient(#c6ff3d33,transparent 70%)}
+.vs{display:flex;align-items:center;justify-content:space-between;margin:16px 0 14px}
+.team{text-align:center;flex:1}
+.team b{display:block;font-family:'Barlow Condensed';font-size:22px;font-weight:700;text-transform:uppercase}
+.team small{color:var(--mut);font-size:12px}
+.vs .mid{font-family:'Barlow Condensed';font-weight:800;font-size:40px;color:var(--acc);padding:0 8px}
+.btn{display:block;text-align:center;background:var(--acc);color:#0a0e13;font-family:'Barlow Condensed';font-weight:800;font-size:20px;letter-spacing:.06em;text-transform:uppercase;padding:14px;border-radius:16px}
+.btn.ghost{background:transparent;color:var(--acc);border:1.5px solid var(--acc)}
+.row{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px;margin-bottom:8px}
+.yr{font-family:'Barlow Condensed';font-weight:800;font-size:26px;color:var(--mut);width:52px}
+.photo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#3b4a5f,#202a37);display:grid;place-items:center;font-size:20px}
+.row .t{flex:1;line-height:1.25}
+.row .t b{font-weight:600}
+.row .t small{display:block;color:var(--mut);font-size:12px}
+.tabbar{height:78px;background:#0d131aee;border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;padding-bottom:14px}
+.tab{text-align:center;font-size:11px;color:var(--mut);font-weight:500}
+.tab i{display:block;font-style:normal;font-size:20px;margin-bottom:2px}
+.tab.on{color:var(--acc)}
+.search{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px;color:var(--mut);font-size:14px;margin-top:10px}
+.tbl{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.th,.tr{display:grid;grid-template-columns:26px 1fr 30px 38px 42px;align-items:center;gap:6px;padding:11px 14px}
+.th{color:var(--mut);font-size:11px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.tr{border-bottom:1px solid #1b2430}
+.tr:last-child{border:0}
+.tr .p{font-weight:600;font-size:15px;display:flex;align-items:center;gap:6px}
+.tr .p small{display:block;color:var(--mut);font-size:11px;font-weight:400}
+.tr .r{font-family:'Barlow Condensed';font-weight:800;font-size:20px;color:var(--mut)}
+.tr .pt{font-family:'Barlow Condensed';font-weight:800;font-size:22px;text-align:right}
+.tr.q1{background:linear-gradient(90deg,#c6ff3d14,transparent)}
+.tr.q1 .r{color:var(--acc)}
+.tr.last{background:linear-gradient(90deg,#ff5a5f14,transparent)}
+.chip{font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:99px;text-transform:uppercase}
+.chip.m{background:#ffc83d24;color:var(--gold)}
+.chip.v{background:#ff5a5f24;color:var(--red)}
+.form{display:flex;gap:3px;margin-top:3px}
+.form s{width:9px;height:9px;border-radius:50%;display:block}
+.w{background:var(--grn)}.d{background:#8a97a8}.l{background:var(--red)}
+.odds{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.odd{background:var(--card2);border:1px solid var(--line);border-radius:16px;padding:12px;text-align:center}
+.odd small{display:block;color:var(--mut);font-size:11px;margin-bottom:2px}
+.odd b{font-family:'Barlow Condensed';font-size:26px;font-weight:800;color:var(--acc)}
+.tip{background:#c6ff3d12;border:1px dashed #c6ff3d66;border-radius:16px;padding:12px 14px;font-size:13px;color:#dff9a0;margin-top:10px}
+.pod{position:relative;height:380px;margin-top:6px;border-radius:24px;overflow:hidden;background:radial-gradient(circle at 50% 0%,#c6ff3d30,transparent 60%),linear-gradient(#141c27,#0a0e13);border:1px solid var(--line);padding:16px;text-align:center}
+.pod .big{font-size:56px;margin-top:6px}
+.pod h1{font-size:44px;margin-top:2px;color:var(--acc)}
+.pod .sub{color:var(--mut);font-size:13px;margin-top:2px}
+.foto{width:260px;height:150px;margin:16px auto 0;border-radius:18px;background:linear-gradient(135deg,#34445a,#1b2430);border:1px solid #33455c;display:grid;place-items:center;color:#6b7b90;font-size:13px;position:relative}
+.foto span{position:absolute;bottom:8px;right:10px;font-size:11px}
+.loser{margin-top:14px;background:#ff5a5f14;border:1px solid #ff5a5f44;border-radius:16px;padding:12px;font-size:14px}
+.rank{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:6px;font-weight:600}
+.rank .num{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:var(--mut);width:24px}
+.rank .pt{margin-left:auto;font-size:20px}
+</style>
+</head>
+<body>
+<div class="cap">Mockup A – Stadion-Look · reine Optik, nicht funktional</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+  <div class="scroll">
+    <h1>Turnier<br>Manager</h1>
+    <div class="hero">
+      <span class="live">LÄUFT · GRUPPENPHASE</span>
+      <div class="vs">
+        <div class="team"><b>Simon</b><small>FC Bayern 👑</small></div>
+        <div class="mid">VS</div>
+        <div class="team"><b>Reto</b><small>Real Madrid 🍋</small></div>
+      </div>
+      <a class="btn">Ergebnis eintragen</a>
+      <div style="color:var(--mut);font-size:12px;text-align:center;margin-top:10px">Spiel 9 von 21 · TV 1 · Tabellenführer: Marco</div>
+    </div>
+    <h2>Archiv</h2>
+    <div class="row"><div class="yr">2025</div><div class="photo">🏆</div><div class="t"><b>Simon</b><small>Verlierer: Reto · 7 Spieler</small></div><span style="color:var(--mut)">›</span></div>
+    <div class="row"><div class="yr">2024</div><div class="photo">🏆</div><div class="t"><b>Marco</b><small>Verlierer: Dani · 7 Spieler</small></div><span style="color:var(--mut)">›</span></div>
+    <div class="row"><div class="yr">2023</div><div class="photo">🏆</div><div class="t"><b>Luca</b><small>Verlierer: Nico · 6 Spieler</small></div><span style="color:var(--mut)">›</span></div>
+    <div class="search">🔎 Turnier per Code öffnen …</div>
+  </div>
+  <div style="padding:0 16px 10px"><a class="btn ghost">+ Neues Turnier</a></div>
+  <div class="tabbar"><div class="tab on"><i>🏠</i>Start</div><div class="tab"><i>📊</i>Tabelle</div><div class="tab"><i>⚽</i>Spiele</div><div class="tab"><i>📈</i>Statistik</div></div>
+</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+  <div class="scroll">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end"><h1>Tabelle</h1><span class="live">LIVE</span></div>
+    <div class="tbl" style="margin-top:14px">
+      <div class="th"><span>#</span><span>Spieler</span><span>Sp</span><span>TD</span><span style="text-align:right">Pkt</span></div>
+      <div class="tr q1"><span class="r">1</span><div class="p"><div>Marco <small>Liverpool</small><div class="form"><s class="w"></s><s class="w"></s><s class="d"></s></div></div></div><span>3</span><span>+5</span><span class="pt">7</span></div>
+      <div class="tr q1"><span class="r">2</span><div class="p"><div>Simon <span class="chip m">👑 Meister</span><small>FC Bayern</small><div class="form"><s class="w"></s><s class="l"></s><s class="w"></s></div></div></div><span>3</span><span>+2</span><span class="pt">6</span></div>
+      <div class="tr q1"><span class="r">3</span><div class="p"><div>Luca <small>PSG</small><div class="form"><s class="d"></s><s class="w"></s><s class="d"></s></div></div></div><span>3</span><span>+1</span><span class="pt">5</span></div>
+      <div class="tr"><span class="r">4</span><div class="p"><div>Dani <small>Arsenal</small><div class="form"><s class="l"></s><s class="w"></s><s class="d"></s></div></div></div><span>3</span><span>0</span><span class="pt">4</span></div>
+      <div class="tr"><span class="r">5</span><div class="p"><div>Jonas <small>Inter</small><div class="form"><s class="w"></s><s class="l"></s><s class="l"></s></div></div></div><span>3</span><span>-2</span><span class="pt">3</span></div>
+      <div class="tr"><span class="r">6</span><div class="p"><div>Nico <small>Juventus</small><div class="form"><s class="l"></s><s class="d"></s><s class="l"></s></div></div></div><span>3</span><span>-3</span><span class="pt">1</span></div>
+      <div class="tr last"><span class="r">7</span><div class="p"><div>Reto <span class="chip v">🍋 Verlierer</span><small>Real Madrid</small><div class="form"><s class="l"></s><s class="l"></s><s class="d"></s></div></div></div><span>3</span><span>-3</span><span class="pt">1</span></div>
+    </div>
+    <h2>Wettquoten · Titel</h2>
+    <div class="odds">
+      <div class="odd"><small>Marco</small><b>2.4</b></div>
+      <div class="odd"><small>Simon</small><b>3.1</b></div>
+      <div class="odd"><small>Luca</small><b>4.8</b></div>
+    </div>
+    <div class="tip">🤖 <b>Computer-Tipp:</b> Marco gewinnt das nächste Spiel gegen Dani mit 2:1 (62 %).</div>
+  </div>
+  <div class="tabbar"><div class="tab"><i>🏠</i>Start</div><div class="tab on"><i>📊</i>Tabelle</div><div class="tab"><i>⚽</i>Spiele</div><div class="tab"><i>📈</i>Statistik</div></div>
+</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+  <div class="scroll">
+    <div class="pod">
+      <div class="big">🏆</div>
+      <div class="sub">TURNIERSIEGER 2026</div>
+      <h1>Marco</h1>
+      <div class="sub">Liverpool · 7 Siege · 24:9 Tore</div>
+      <div class="foto">📷 Siegerfoto<span>Marco &amp; Reto</span></div>
+    </div>
+    <div class="loser">🍋 <b>Reto</b> geht auf die Pressekonferenz. Viel Spass!</div>
+    <h2>Endstand</h2>
+    <div class="rank"><span class="num">1</span>Marco<span class="pt">🥇</span></div>
+    <div class="rank"><span class="num">2</span>Simon 👑<span class="pt">🥈</span></div>
+    <div class="rank"><span class="num">3</span>Luca<span class="pt">🥉</span></div>
+  </div>
+  <div style="padding:0 16px 10px"><a class="btn">Auf WhatsApp teilen</a></div>
+  <div class="tabbar"><div class="tab"><i>🏠</i>Start</div><div class="tab"><i>📊</i>Tabelle</div><div class="tab"><i>⚽</i>Spiele</div><div class="tab on"><i>📈</i>Statistik</div></div>
+</div>
+</body>
+</html>

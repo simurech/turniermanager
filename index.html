@@ -1,0 +1,2288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">Turnier Manager</title>
+    <meta name="description" id="page-description" content="Turnier Manager - Erstelle und verwalte dein eigenes Turnier">
+    <meta property="og:title" id="og-title" content="Turnier Manager">
+    <meta property="og:description" id="og-description" content="Turnier Manager - Erstelle und verwalte dein eigenes Turnier">
+    <meta property="og:type" content="website">
+    <meta property="og:url" id="og-url" content="">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" id="twitter-title" content="Turnier Manager">
+    <meta name="twitter:description" id="twitter-description" content="Turnier Manager - Erstelle und verwalte dein eigenes Turnier">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        }
+        .knockout-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        }
+        .finished-bg {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 50%, #ff6b6b 100%);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        const API_URL = "./api.php";
+
+        function TournamentApp() {
+            const [phase, setPhase] = useState('setup');
+            const [config, setConfig] = useState({
+                numPlayers: 4,
+                numTVs: 1,
+                tiebreaker: 'goalDiff',
+                doubleRoundRobin: true,
+                thirdPlacePlayoff: true
+            });
+            const [players, setPlayers] = useState([]);
+            const [matches, setMatches] = useState([]);
+            const [standings, setStandings] = useState([]);
+            const [knockoutMatches, setKnockoutMatches] = useState([]);
+            const [winner, setWinner] = useState(null);
+            const [loser, setLoser] = useState(null);
+            const [tournamentId, setTournamentId] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [useLocalStorage, setUseLocalStorage] = useState(false);
+            const [createdAt, setCreatedAt] = useState(null);
+
+            const saveDataToLocalStorage = (id, data) => {
+                const tournamentData = {
+                    ...data,
+                    lastUpdated: new Date().toISOString()
+                };
+                localStorage.setItem(`tournament_${id}`, JSON.stringify(tournamentData));
+            };
+
+            const loadDataFromLocalStorage = (id) => {
+                const data = localStorage.getItem(`tournament_${id}`);
+                return data ? JSON.parse(data) : null;
+            };
+
+            const saveData = useCallback(async (data) => {
+                if (!tournamentId) return;
+                
+                if (useLocalStorage) {
+                    saveDataToLocalStorage(tournamentId, data);
+                    return;
+                }
+
+                setLoading(true);
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'update',
+                            id: tournamentId,
+                            ...data
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Fehler beim Speichern');
+                    }
+                } catch (error) {
+                    console.error('API nicht verfügbar, verwende localStorage:', error);
+                    setUseLocalStorage(true);
+                    saveDataToLocalStorage(tournamentId, data);
+                } finally {
+                    setLoading(false);
+                }
+            }, [tournamentId, useLocalStorage]);
+
+            const loadTournament = useCallback(async (id) => {
+                setLoading(true);
+                try {
+                    if (useLocalStorage) {
+                        const data = loadDataFromLocalStorage(id);
+                        if (!data) {
+                            throw new Error('Turnier nicht gefunden');
+                        }
+                        
+                        setConfig(data.config);
+                        setPlayers(data.players || []);
+                        setMatches(data.matches || []);
+                        setStandings(data.standings || []);
+                        setKnockoutMatches(data.knockoutMatches || []);
+                        setPhase(data.phase || 'setup');
+                        setWinner(data.winner || null);
+                        setLoser(data.loser || null);
+                        setCreatedAt(data.createdAt || data.lastUpdated || null);
+                        setTournamentId(id);
+                        return;
+                    }
+
+                    const response = await fetch(`${API_URL}?action=load&id=${id}`);
+                    
+                    if (!response.ok) {
+                        throw new Error('Turnier nicht gefunden');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    setConfig(data.config);
+                    setPlayers(data.players || []);
+                    setMatches(data.matches || []);
+                    setStandings(data.standings || []);
+                    setKnockoutMatches(data.knockoutMatches || []);
+                    setPhase(data.phase || 'setup');
+                    setWinner(data.winner || null);
+                    setLoser(data.loser || null);
+                    setTournamentId(id);
+                } catch (error) {
+                    console.error('API nicht verfügbar, versuche localStorage:', error);
+                    setUseLocalStorage(true);
+                    const data = loadDataFromLocalStorage(id);
+                    if (data) {
+                        setConfig(data.config);
+                        setPlayers(data.players || []);
+                        setMatches(data.matches || []);
+                        setStandings(data.standings || []);
+                        setKnockoutMatches(data.knockoutMatches || []);
+                        setPhase(data.phase || 'setup');
+                        setWinner(data.winner || null);
+                        setLoser(data.loser || null);
+                        setCreatedAt(data.createdAt || data.lastUpdated || null);
+                        setTournamentId(id);
+                    } else {
+                        alert('Turnier nicht gefunden');
+                    }
+                } finally {
+                    setLoading(false);
+                }
+            }, [useLocalStorage]);
+
+            useEffect(() => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const id = urlParams.get('turnier');
+                if (id) {
+                    loadTournament(id);
+                }
+            }, [loadTournament]);
+
+            useEffect(() => {
+                if (phase !== 'setup' && tournamentId) {
+                    const data = {
+                        config,
+                        players,
+                        matches,
+                        standings,
+                        knockoutMatches,
+                        phase,
+                        winner,
+                        loser,
+                        createdAt
+                    };
+                    saveData(data);
+                }
+            }, [phase, config, players, matches, standings, knockoutMatches, winner, loser, createdAt, tournamentId, saveData]);
+
+            const generateTournamentId = () => {
+                const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789';
+                let result = '';
+                for (let i = 0; i < 6; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                return result;
+            };
+
+            const startTournament = async () => {
+                if (players.length < config.numPlayers) {
+                    alert('Bitte alle Spieler konfigurieren!');
+                    return;
+                }
+
+                const newId = generateTournamentId();
+                const newMatches = scheduleMatches(players, config.numTVs, config.doubleRoundRobin);
+                const newStandings = calculateInitialStandings(players);
+                
+                const tournamentData = {
+                    config,
+                    players,
+                    matches: newMatches,
+                    standings: newStandings,
+                    knockoutMatches: [],
+                    phase: 'group',
+                    winner: null,
+                    loser: null,
+                    createdAt: new Date().toLocaleDateString('de-DE', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })
+                };
+
+                if (useLocalStorage) {
+                    saveDataToLocalStorage(newId, tournamentData);
+                    setTournamentId(newId);
+                    setMatches(newMatches);
+                    setStandings(newStandings);
+                    setPhase('group');
+                    setCreatedAt(tournamentData.createdAt);
+                    
+                    const newUrl = `${window.location.pathname}?turnier=${newId}`;
+                    window.history.pushState({}, '', newUrl);
+                    return;
+                }
+
+                setLoading(true);
+                
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'create',
+                            id: newId,
+                            ...tournamentData
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Fehler beim Erstellen des Turniers');
+                    }
+                    
+                    setTournamentId(newId);
+                    setMatches(newMatches);
+                    setStandings(newStandings);
+                    setPhase('group');
+                    setCreatedAt(tournamentData.createdAt);
+                    
+                    const newUrl = `${window.location.pathname}?turnier=${newId}`;
+                    window.history.pushState({}, '', newUrl);
+                } catch (error) {
+                    console.error('API nicht verfügbar, verwende localStorage:', error);
+                    setUseLocalStorage(true);
+                    saveDataToLocalStorage(newId, tournamentData);
+                    setTournamentId(newId);
+                    setMatches(newMatches);
+                    setStandings(newStandings);
+                    setPhase('group');
+                    setCreatedAt(tournamentData.createdAt);
+                    
+                    const newUrl = `${window.location.pathname}?turnier=${newId}`;
+                    window.history.pushState({}, '', newUrl);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const scheduleMatches = (playerList, numTVs, doubleRoundRobin = true) => {
+                const numPlayers = playerList.length;
+                let matchId = 0;
+
+                // Generate all possible matchups
+                const matchups = [];
+                for (let i = 0; i < numPlayers; i++) {
+                    for (let j = i + 1; j < numPlayers; j++) {
+                        matchups.push([i, j]);
+                        if (doubleRoundRobin) {
+                            matchups.push([j, i]); // Return match
+                        }
+                    }
+                }
+
+                if (numTVs === 1) {
+                    // Simple scheduling for 1 TV - rotate players to minimize consecutive games
+                    return scheduleForSingleTV(matchups, numPlayers, matchId);
+                } else {
+                    // Advanced scheduling for 2 TVs
+                    return scheduleForTwoTVs(matchups, numPlayers, matchId);
+                }
+            };
+
+            const scheduleForSingleTV = (matchups, numPlayers, startId) => {
+                const matches = [];
+                const playerLastRound = new Array(numPlayers).fill(-1); // Track when each player last played
+                let matchId = startId;
+                let currentRound = 1;
+
+                // Create a copy to work with
+                const remainingMatchups = [...matchups];
+                
+                while (remainingMatchups.length > 0) {
+                    let bestMatch = null;
+                    let bestIndex = -1;
+                    let bestScore = -1;
+
+                    // Find the best match for this round (prefer players who haven't played recently)
+                    for (let i = 0; i < remainingMatchups.length; i++) {
+                        const [home, away] = remainingMatchups[i];
+                        const homeGap = currentRound - playerLastRound[home];
+                        const awayGap = currentRound - playerLastRound[away];
+                        const minGap = Math.min(homeGap, awayGap);
+                        
+                        if (minGap > bestScore) {
+                            bestScore = minGap;
+                            bestMatch = remainingMatchups[i];
+                            bestIndex = i;
+                        }
+                    }
+
+                    if (bestMatch) {
+                        const [home, away] = bestMatch;
+                        matches.push({
+                            id: matchId++,
+                            homePlayer: home,
+                            awayPlayer: away,
+                            homeGoals: null,
+                            awayGoals: null,
+                            tv: 1,
+                            round: currentRound
+                        });
+
+                        playerLastRound[home] = currentRound;
+                        playerLastRound[away] = currentRound;
+                        remainingMatchups.splice(bestIndex, 1);
+                        currentRound++;
+                    }
+                }
+
+                return matches;
+            };
+
+            const scheduleForTwoTVs = (matchups, numPlayers, startId) => {
+                const matches = [];
+                const playerLastRound = new Array(numPlayers).fill(-1);
+                const playerTVCount = new Array(numPlayers).fill(0).map(() => [0, 0]); // [TV1 count, TV2 count]
+                let matchId = startId;
+                let currentRound = 1;
+
+                const remainingMatchups = [...matchups];
+                let tv1Count = 0;
+                let tv2Count = 0;
+
+                while (remainingMatchups.length > 0) {
+                    const roundMatches = [];
+                    const roundPlayers = new Set();
+
+                    // Try to schedule 2 matches for this round (one per TV)
+                    for (let tv = 1; tv <= 2; tv++) {
+                        let bestMatch = null;
+                        let bestIndex = -1;
+                        let bestScore = -1000;
+
+                        for (let i = 0; i < remainingMatchups.length; i++) {
+                            const [home, away] = remainingMatchups[i];
+                            
+                            // Skip if players already playing this round
+                            if (roundPlayers.has(home) || roundPlayers.has(away)) continue;
+
+                            // Calculate score for this match
+                            let score = 0;
+                            
+                            // Strongly prefer players who haven't played recently
+                            const homeGap = currentRound - playerLastRound[home];
+                            const awayGap = currentRound - playerLastRound[away];
+                            score += Math.min(homeGap, awayGap) * 50; // Increased weight for rest time
+                            
+                            // Prefer balancing TV usage for players (lower weight than rest time)
+                            const homeTVBalance = playerTVCount[home][0] - playerTVCount[home][1];
+                            const awayTVBalance = playerTVCount[away][0] - playerTVCount[away][1];
+                            if (tv === 1) {
+                                score -= homeTVBalance * 2; // Prefer players who have played less on TV1
+                                score -= awayTVBalance * 2;
+                            } else {
+                                score += homeTVBalance * 2; // Prefer players who have played more on TV1 (for TV2)
+                                score += awayTVBalance * 2;
+                            }
+
+                            // Prefer balancing total TV load - give bonus to less loaded TV
+                            if (tv === 1 && tv1Count < tv2Count) {
+                                score += 5; // Bonus for TV1 if it has fewer matches
+                            } else if (tv === 2 && tv2Count < tv1Count) {
+                                score += 5; // Bonus for TV2 if it has fewer matches
+                            }
+
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestMatch = remainingMatchups[i];
+                                bestIndex = i;
+                            }
+                        }
+
+                        if (bestMatch) {
+                            const [home, away] = bestMatch;
+                            
+                            matches.push({
+                                id: matchId++,
+                                homePlayer: home,
+                                awayPlayer: away,
+                                homeGoals: null,
+                                awayGoals: null,
+                                tv: tv,
+                                round: currentRound
+                            });
+
+                            roundMatches.push(bestMatch);
+                            roundPlayers.add(home);
+                            roundPlayers.add(away);
+                            playerLastRound[home] = currentRound;
+                            playerLastRound[away] = currentRound;
+                            playerTVCount[home][tv - 1]++;
+                            playerTVCount[away][tv - 1]++;
+                            
+                            // Track total matches per TV
+                            if (tv === 1) tv1Count++;
+                            else tv2Count++;
+                            
+                            remainingMatchups.splice(bestIndex, 1);
+                        }
+                    }
+
+                    // Only advance round if we scheduled at least one match
+                    if (roundMatches.length > 0) {
+                        currentRound++;
+                    } else {
+                        // Fallback: just schedule the first available match on the TV with fewer matches
+                        if (remainingMatchups.length > 0) {
+                            const [home, away] = remainingMatchups[0];
+                            const preferredTV = tv1Count <= tv2Count ? 1 : 2;
+                            
+                            matches.push({
+                                id: matchId++,
+                                homePlayer: home,
+                                awayPlayer: away,
+                                homeGoals: null,
+                                awayGoals: null,
+                                tv: preferredTV,
+                                round: currentRound
+                            });
+                            
+                            playerTVCount[home][preferredTV - 1]++;
+                            playerTVCount[away][preferredTV - 1]++;
+                            
+                            if (preferredTV === 1) tv1Count++;
+                            else tv2Count++;
+                            
+                            remainingMatchups.splice(0, 1);
+                            currentRound++;
+                        }
+                    }
+                }
+
+                return matches;
+            };
+
+            const balanceTVDistribution = (matches) => {
+                const tv1Matches = matches.filter(m => m.tv === 1);
+                const tv2Matches = matches.filter(m => m.tv === 2);
+                const difference = Math.abs(tv1Matches.length - tv2Matches.length);
+                
+                // If the difference is more than 1, try to rebalance
+                if (difference > 1) {
+                    const fromTV = tv1Matches.length > tv2Matches.length ? 1 : 2;
+                    const toTV = fromTV === 1 ? 2 : 1;
+                    const fromMatches = fromTV === 1 ? tv1Matches : tv2Matches;
+                    const toMatches = fromTV === 1 ? tv2Matches : tv1Matches;
+                    
+                    const movesToMake = Math.floor(difference / 2);
+                    
+                    // Try to move matches from the over-loaded TV to the under-loaded TV
+                    for (let i = 0; i < movesToMake && i < fromMatches.length; i++) {
+                        const matchToMove = fromMatches[fromMatches.length - 1 - i];
+                        
+                        // Check if moving this match would create conflicts
+                        const conflictingMatch = toMatches.find(m => 
+                            m.round === matchToMove.round && 
+                            (m.homePlayer === matchToMove.homePlayer || 
+                             m.awayPlayer === matchToMove.homePlayer ||
+                             m.homePlayer === matchToMove.awayPlayer || 
+                             m.awayPlayer === matchToMove.awayPlayer)
+                        );
+                        
+                        // Only move if no conflicts
+                        if (!conflictingMatch) {
+                            matchToMove.tv = toTV;
+                        }
+                    }
+                }
+                
+                return matches;
+            };
+
+            const calculateInitialStandings = (playerList) => {
+                return playerList.map((player, index) => ({
+                    playerId: index,
+                    played: 0,
+                    won: 0,
+                    draw: 0,
+                    lost: 0,
+                    goalsFor: 0,
+                    goalsAgainst: 0,
+                    goalDiff: 0,
+                    points: 0
+                }));
+            };
+
+            const updateMatchResult = (matchId, homeGoals, awayGoals) => {
+                const updatedMatches = matches.map(match => 
+                    match.id === matchId 
+                        ? { ...match, homeGoals: parseInt(homeGoals), awayGoals: parseInt(awayGoals) }
+                        : match
+                );
+                setMatches(updatedMatches);
+                setStandings(calculateStandings(updatedMatches, players, config.tiebreaker));
+            };
+
+            const calculateStandings = (matchList, playerList, tiebreaker) => {
+                const stats = playerList.map((player, index) => ({
+                    playerId: index,
+                    played: 0,
+                    won: 0,
+                    draw: 0,
+                    lost: 0,
+                    goalsFor: 0,
+                    goalsAgainst: 0,
+                    goalDiff: 0,
+                    points: 0
+                }));
+
+                matchList.forEach(match => {
+                    if (match.homeGoals !== null && match.awayGoals !== null) {
+                        const homeStats = stats[match.homePlayer];
+                        const awayStats = stats[match.awayPlayer];
+                        
+                        homeStats.played++;
+                        awayStats.played++;
+                        
+                        homeStats.goalsFor += match.homeGoals;
+                        homeStats.goalsAgainst += match.awayGoals;
+                        awayStats.goalsFor += match.awayGoals;
+                        awayStats.goalsAgainst += match.homeGoals;
+                        
+                        if (match.homeGoals > match.awayGoals) {
+                            homeStats.won++;
+                            homeStats.points += 3;
+                            awayStats.lost++;
+                        } else if (match.homeGoals < match.awayGoals) {
+                            awayStats.won++;
+                            awayStats.points += 3;
+                            homeStats.lost++;
+                        } else {
+                            homeStats.draw++;
+                            awayStats.draw++;
+                            homeStats.points += 1;
+                            awayStats.points += 1;
+                        }
+                        
+                        homeStats.goalDiff = homeStats.goalsFor - homeStats.goalsAgainst;
+                        awayStats.goalDiff = awayStats.goalsFor - awayStats.goalsAgainst;
+                    }
+                });
+
+                return stats.sort((a, b) => {
+                    // 1. Punkte (Hauptkriterium)
+                    if (a.points !== b.points) return b.points - a.points;
+                    
+                    // 2. Direktbegegnung (falls konfiguriert)
+                    if (tiebreaker === 'head2head') {
+                        const headToHead = calculateHeadToHead(a.playerId, b.playerId, matchList);
+                        if (headToHead !== 0) return headToHead;
+                    }
+                    
+                    // 3. Tordifferenz
+                    if (a.goalDiff !== b.goalDiff) return b.goalDiff - a.goalDiff;
+                    
+                    // 4. Geschossene Tore (mehr ist besser)
+                    if (a.goalsFor !== b.goalsFor) return b.goalsFor - a.goalsFor;
+                    
+                    // 5. Weniger kassierte Tore (bessere Defensive)
+                    if (a.goalsAgainst !== b.goalsAgainst) return a.goalsAgainst - b.goalsAgainst;
+                    
+                    // 6. Mehr Siege (bei gleichen Punkten bevorzugt)
+                    if (a.won !== b.won) return b.won - a.won;
+                    
+                    // 7. Weniger Niederlagen
+                    if (a.lost !== b.lost) return a.lost - b.lost;
+                    
+                    // 8. Alphabetische Reihenfolge der Spielernamen (letztes Kriterium)
+                    const nameA = playerList[a.playerId]?.name || '';
+                    const nameB = playerList[b.playerId]?.name || '';
+                    return nameA.localeCompare(nameB);
+                });
+            };
+
+            const calculateHeadToHead = (player1, player2, matchList) => {
+                let player1Points = 0;
+                let player2Points = 0;
+                
+                matchList.forEach(match => {
+                    if ((match.homePlayer === player1 && match.awayPlayer === player2) ||
+                        (match.homePlayer === player2 && match.awayPlayer === player1)) {
+                        if (match.homeGoals !== null && match.awayGoals !== null) {
+                            if (match.homePlayer === player1) {
+                                if (match.homeGoals > match.awayGoals) player1Points += 3;
+                                else if (match.homeGoals < match.awayGoals) player2Points += 3;
+                                else { player1Points += 1; player2Points += 1; }
+                            } else {
+                                if (match.awayGoals > match.homeGoals) player1Points += 3;
+                                else if (match.awayGoals < match.homeGoals) player2Points += 3;
+                                else { player1Points += 1; player2Points += 1; }
+                            }
+                        }
+                    }
+                });
+                
+                return player2Points - player1Points;
+            };
+
+            const startKnockout = () => {
+                const completedMatches = matches.filter(m => m.homeGoals !== null && m.awayGoals !== null);
+                if (completedMatches.length !== matches.length) {
+                    alert('Alle Gruppenspiele müssen erst gespielt werden!');
+                    return;
+                }
+
+                const knockoutGames = generateKnockoutMatches(standings, players, config);
+                setKnockoutMatches(knockoutGames);
+                setPhase('knockout');
+            };
+
+            const generateKnockoutMatches = (currentStandings, playerList, config) => {
+                const matches = [];
+                
+                if (currentStandings.length >= 4) {
+                    matches.push({
+                        id: 'sf1',
+                        type: 'semi',
+                        bracket: 'top',
+                        homePlayer: currentStandings[0].playerId,
+                        awayPlayer: currentStandings[3].playerId,
+                        homeGoals: null,
+                        awayGoals: null
+                    });
+                    
+                    matches.push({
+                        id: 'sf2',
+                        type: 'semi',
+                        bracket: 'top',
+                        homePlayer: currentStandings[1].playerId,
+                        awayPlayer: currentStandings[2].playerId,
+                        homeGoals: null,
+                        awayGoals: null
+                    });
+                }
+
+                if (currentStandings.length >= 5) {
+                    // For 5-6 players: direct bottom matches between all remaining players
+                    if (currentStandings.length <= 6) {
+                        for (let i = 4; i < currentStandings.length - 1; i++) {
+                            matches.push({
+                                id: `bottom${i}`,
+                                type: 'bottom',
+                                bracket: 'bottom',
+                                homePlayer: currentStandings[i].playerId,
+                                awayPlayer: currentStandings[i + 1].playerId,
+                                homeGoals: null,
+                                awayGoals: null
+                            });
+                        }
+                    } else {
+                        // For 7+ players: create loser semifinal and loser final structure
+                        // Loser semifinal: rank 5 vs rank 6
+                        matches.push({
+                            id: 'loser_semi',
+                            type: 'loser_semi',
+                            bracket: 'bottom',
+                            homePlayer: currentStandings[4].playerId,
+                            awayPlayer: currentStandings[5].playerId,
+                            homeGoals: null,
+                            awayGoals: null
+                        });
+                        
+                        // Loser final: winner of loser semifinal vs rank 7
+                        // Note: rank 7 gets automatic bye to loser final
+                        matches.push({
+                            id: 'loser_final',
+                            type: 'loser_final',
+                            bracket: 'bottom',
+                            homePlayer: 'TBD_loser_semi', // Will be determined after loser semifinal
+                            awayPlayer: currentStandings[6].playerId,
+                            homeGoals: null,
+                            awayGoals: null
+                        });
+                        
+                        // For 8+ players, continue pattern...
+                        if (currentStandings.length > 7) {
+                            for (let i = 7; i < currentStandings.length - 1; i++) {
+                                matches.push({
+                                    id: `bottom${i}`,
+                                    type: 'bottom',
+                                    bracket: 'bottom',
+                                    homePlayer: currentStandings[i].playerId,
+                                    awayPlayer: currentStandings[i + 1].playerId,
+                                    homeGoals: null,
+                                    awayGoals: null
+                                });
+                            }
+                        }
+                    }
+                }
+
+                return matches;
+            };
+
+            const updateKnockoutResult = (matchId, homeGoals, awayGoals) => {
+                const updatedMatches = knockoutMatches.map(match => 
+                    match.id === matchId 
+                        ? { ...match, homeGoals: parseInt(homeGoals), awayGoals: parseInt(awayGoals) }
+                        : match
+                );
+                
+                // Handle loser semifinal completion
+                if (matchId === 'loser_semi') {
+                    const loserSemiMatch = updatedMatches.find(m => m.id === 'loser_semi');
+                    if (loserSemiMatch && loserSemiMatch.homeGoals !== null) {
+                        const loserSemiWinner = loserSemiMatch.homeGoals > loserSemiMatch.awayGoals 
+                            ? loserSemiMatch.homePlayer 
+                            : loserSemiMatch.awayPlayer;
+                        
+                        // Update loser final with the winner
+                        const loserFinalIndex = updatedMatches.findIndex(m => m.id === 'loser_final');
+                        if (loserFinalIndex !== -1 && updatedMatches[loserFinalIndex].homePlayer === 'TBD_loser_semi') {
+                            updatedMatches[loserFinalIndex] = {
+                                ...updatedMatches[loserFinalIndex],
+                                homePlayer: loserSemiWinner
+                            };
+                        }
+                    }
+                }
+                
+                setKnockoutMatches(updatedMatches);
+
+                const semis = updatedMatches.filter(m => m.type === 'semi' && m.homeGoals !== null);
+                
+                if (semis.length === 2 && !updatedMatches.find(m => m.type === 'final')) {
+                    const winners = semis.map(m => 
+                        m.homeGoals > m.awayGoals ? m.homePlayer : m.awayPlayer
+                    );
+                    const losers = semis.map(m => 
+                        m.homeGoals > m.awayGoals ? m.awayPlayer : m.homePlayer
+                    );
+
+                    updatedMatches.push({
+                        id: 'final',
+                        type: 'final',
+                        bracket: 'top',
+                        homePlayer: winners[0],
+                        awayPlayer: winners[1],
+                        homeGoals: null,
+                        awayGoals: null
+                    });
+
+                    if (config.thirdPlacePlayoff) {
+                        updatedMatches.push({
+                            id: 'third',
+                            type: 'third',
+                            bracket: 'top',
+                            homePlayer: losers[0],
+                            awayPlayer: losers[1],
+                            homeGoals: null,
+                            awayGoals: null
+                        });
+                    }
+
+                    setKnockoutMatches(updatedMatches);
+                }
+
+                // Winner and loser are now set manually via finishTournament button
+            };
+
+            const finishTournament = () => {
+                const final = knockoutMatches.find(m => m.type === 'final' && m.homeGoals !== null);
+                if (final) {
+                    const tournamentWinner = final.homeGoals > final.awayGoals ? final.homePlayer : final.awayPlayer;
+                    const tournamentLoser = final.homeGoals > final.awayGoals ? final.awayPlayer : final.homePlayer;
+                    
+                    setWinner(tournamentWinner);
+                    setLoser(tournamentLoser);
+                    setPhase('finished');
+                } else {
+                    alert('Das Finale muss erst gespielt werden!');
+                }
+            };
+
+            // Update meta tags based on tournament state
+            const updateMetaTags = useCallback(() => {
+                const currentUrl = window.location.href;
+                let title, description, shareText;
+
+                if (!tournamentId) {
+                    title = "Turnier Manager";
+                    description = "Erstelle und verwalte dein eigenes Turnier";
+                    shareText = "Erstelle dein eigenes Turnier!";
+                } else {
+                    switch (phase) {
+                        case 'setup':
+                            title = `Turnier Setup - ${tournamentId}`;
+                            description = `Turnier ${tournamentId} wird gerade eingerichtet`;
+                            shareText = `Schau dir das Turnier ${tournamentId} an - wir richten es gerade ein!`;
+                            break;
+                        case 'group':
+                            const completedMatches = matches.filter(m => m.homeGoals !== null && m.awayGoals !== null).length;
+                            const totalMatches = matches.length;
+                            title = `Gruppenphase - Turnier ${tournamentId}`;
+                            description = `Turnier ${tournamentId} - Gruppenphase läuft (${completedMatches}/${totalMatches} Spiele gespielt)`;
+                            shareText = `Schau dir unser Turnier ${tournamentId} an! Wir sind in der Gruppenphase (${completedMatches}/${totalMatches} Spiele gespielt).`;
+                            break;
+                        case 'knockout':
+                            title = `K.O.-Phase - Turnier ${tournamentId}`;
+                            description = `Turnier ${tournamentId} - Spannende K.O.-Phase läuft`;
+                            shareText = `Die K.O.-Phase von Turnier ${tournamentId} läuft! Schau dir die spannenden Spiele an.`;
+                            break;
+                        case 'finished':
+                            const winnerName = players[winner]?.name || 'Unbekannt';
+                            title = `🏆 ${winnerName} gewinnt - Turnier ${tournamentId}`;
+                            description = `Turnier ${tournamentId} beendet! Sieger: ${winnerName}`;
+                            shareText = `🏆 Turnier ${tournamentId} ist beendet! ${winnerName} hat gewonnen! Schau dir die Endergebnisse an.`;
+                            break;
+                        default:
+                            title = `Turnier ${tournamentId}`;
+                            description = `Turnier ${tournamentId}`;
+                            shareText = `Schau dir Turnier ${tournamentId} an!`;
+                    }
+                }
+
+                // Update document title and meta tags
+                document.title = title;
+                document.getElementById('page-title').content = title;
+                document.getElementById('page-description').content = description;
+                document.getElementById('og-title').content = title;
+                document.getElementById('og-description').content = description;
+                document.getElementById('og-url').content = currentUrl;
+                document.getElementById('twitter-title').content = title;
+                document.getElementById('twitter-description').content = description;
+
+                return shareText;
+            }, [phase, tournamentId, players, winner, matches]);
+
+            // Call updateMetaTags whenever relevant state changes
+            useEffect(() => {
+                updateMetaTags();
+            }, [updateMetaTags]);
+
+            const updatePlayerName = (index, name) => {
+                const newPlayers = [...players];
+                while (newPlayers.length <= index) {
+                    newPlayers.push({ id: newPlayers.length, name: '', team: '' });
+                }
+                newPlayers[index] = { ...newPlayers[index], name };
+                setPlayers(newPlayers);
+            };
+
+            const updatePlayerTeam = (index, team) => {
+                const newPlayers = [...players];
+                while (newPlayers.length <= index) {
+                    newPlayers.push({ id: newPlayers.length, name: '', team: '' });
+                }
+                newPlayers[index] = { ...newPlayers[index], team };
+                setPlayers(newPlayers);
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen gradient-bg flex items-center justify-center">
+                        <div className="text-white text-xl">Lade...</div>
+                    </div>
+                );
+            }
+
+            if (phase === 'setup') {
+                return <SetupPhase 
+                    config={config} 
+                    setConfig={setConfig}
+                    players={players}
+                    updatePlayerName={updatePlayerName}
+                    updatePlayerTeam={updatePlayerTeam}
+                    startTournament={startTournament}
+                    updateMetaTags={updateMetaTags}
+                />;
+            }
+
+            if (phase === 'group') {
+                return <GroupPhase 
+                    players={players}
+                    matches={matches}
+                    standings={standings}
+                    updateMatchResult={updateMatchResult}
+                    startKnockout={startKnockout}
+                    tournamentId={tournamentId}
+                    config={config}
+                    createdAt={createdAt}
+                    updateMetaTags={updateMetaTags}
+                    setPhase={setPhase}
+                    knockoutMatches={knockoutMatches}
+                />;
+            }
+
+            if (phase === 'knockout') {
+                return <KnockoutPhase 
+                    players={players}
+                    knockoutMatches={knockoutMatches}
+                    updateKnockoutResult={updateKnockoutResult}
+                    tournamentId={tournamentId}
+                    createdAt={createdAt}
+                    config={config}
+                    finishTournament={finishTournament}
+                    updateMetaTags={updateMetaTags}
+                    setPhase={setPhase}
+                />;
+            }
+
+            if (phase === 'finished') {
+                return <FinishedPhase 
+                    players={players}
+                    winner={winner}
+                    loser={loser}
+                    standings={standings}
+                    setPhase={setPhase}
+                    setTournamentId={setTournamentId}
+                    knockoutMatches={knockoutMatches}
+                    config={config}
+                    tournamentId={tournamentId}
+                    createdAt={createdAt}
+                    updateMetaTags={updateMetaTags}
+                />;
+            }
+
+            return null;
+        }
+
+        function SetupPhase({ config, setConfig, players, updatePlayerName, updatePlayerTeam, startTournament, updateMetaTags }) {
+            const [showConfirmation, setShowConfirmation] = useState(false);
+
+            const handleShare = async () => {
+                const url = `${window.location.origin}${window.location.pathname}`;
+                const shareText = updateMetaTags();
+                
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Turnier Manager',
+                            text: shareText,
+                            url: url
+                        });
+                    } catch (err) {
+                        copyToClipboard(url);
+                    }
+                } else {
+                    copyToClipboard(url);
+                }
+            };
+
+            const copyToClipboard = async (text) => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    alert('Link in Zwischenablage kopiert!');
+                } catch (err) {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('Link in Zwischenablage kopiert!');
+                }
+            };
+
+            const handleReset = () => {
+                if (confirm('Möchtest du wirklich alle Einstellungen zurücksetzen?')) {
+                    setConfig({
+                        numPlayers: 4,
+                        numTVs: 1,
+                        tiebreaker: 'goalDiff',
+                        doubleRoundRobin: true,
+                        thirdPlacePlayoff: true
+                    });
+                    // Reset all players
+                    for (let i = 0; i < players.length; i++) {
+                        updatePlayerName(i, '');
+                        updatePlayerTeam(i, '');
+                    }
+                }
+            };
+
+            const handleShowConfirmation = () => {
+                if (players.length < config.numPlayers) {
+                    alert('Bitte alle Spieler konfigurieren!');
+                    return;
+                }
+                
+                const missingNames = [];
+                for (let i = 0; i < config.numPlayers; i++) {
+                    if (!players[i]?.name?.trim()) {
+                        missingNames.push(i + 1);
+                    }
+                }
+                
+                if (missingNames.length > 0) {
+                    alert(`Bitte Namen für folgende Spieler eingeben: ${missingNames.join(', ')}`);
+                    return;
+                }
+                
+                setShowConfirmation(true);
+            };
+
+            const confirmAndStart = () => {
+                setShowConfirmation(false);
+                startTournament();
+            };
+
+            if (showConfirmation) {
+                return <TournamentConfirmation 
+                    config={config} 
+                    players={players} 
+                    onConfirm={confirmAndStart} 
+                    onCancel={() => setShowConfirmation(false)} 
+                />;
+            }
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    <div className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 py-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">
+                                        🏆 Turnier Manager
+                                    </h1>
+                                    <div className="text-sm text-gray-500 mt-1">
+                                        Konfiguriere dein neues Turnier
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <button
+                                        onClick={handleShare}
+                                        className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+                                        title="Turnier Manager teilen"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                                        </svg>
+                                        Teilen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-3xl mx-auto px-4 py-8">
+                        <div className="bg-white rounded-xl shadow-lg p-8">
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Turnier Konfiguration */}
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Turnier Einstellungen</h3>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Anzahl Spieler
+                                    </label>
+                                    <select 
+                                        value={config.numPlayers}
+                                        onChange={(e) => setConfig({...config, numPlayers: parseInt(e.target.value)})}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        {[4,5,6,7,8].map(num => (
+                                            <option key={num} value={num}>{num} Spieler</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Anzahl Fernseher/Beamer
+                                    </label>
+                                    <select 
+                                        value={config.numTVs}
+                                        onChange={(e) => setConfig({...config, numTVs: parseInt(e.target.value)})}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value={1}>1 Fernseher/Beamer</option>
+                                        <option value={2}>2 Fernseher/Beamer</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                                        Gruppenphase
+                                    </label>
+                                    <label className="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={config.doubleRoundRobin}
+                                            onChange={(e) => setConfig({...config, doubleRoundRobin: e.target.checked})}
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <span className="ml-2 text-sm text-gray-700">
+                                            Hin- und Rückrunde (jeder gegen jeden 2x)
+                                        </span>
+                                    </label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Ohne Haken: Nur eine Runde (jeder gegen jeden 1x)
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                                        K.O.-Phase Optionen
+                                    </label>
+                                    <label className="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={config.thirdPlacePlayoff}
+                                            onChange={(e) => setConfig({...config, thirdPlacePlayoff: e.target.checked})}
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <span className="ml-2 text-sm text-gray-700">
+                                            Spiel um Platz 3 austragen
+                                        </span>
+                                    </label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Halbfinal-Verlierer spielen um den dritten Platz
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Tiebreaker bei Punktgleichheit
+                                    </label>
+                                    <select 
+                                        value={config.tiebreaker}
+                                        onChange={(e) => setConfig({...config, tiebreaker: e.target.value})}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="goalDiff">Torverhältnis</option>
+                                        <option value="head2head">Direktbegegnung</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Spieler Konfiguration */}
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Spieler</h3>
+                                <div className="space-y-4">
+                                    {Array.from({ length: config.numPlayers }).map((_, index) => (
+                                        <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Spieler ${index + 1} Name`}
+                                                    value={players[index]?.name || ''}
+                                                    onChange={(e) => updatePlayerName(index, e.target.value)}
+                                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Team (optional)`}
+                                                    value={players[index]?.team || ''}
+                                                    onChange={(e) => updatePlayerTeam(index, e.target.value)}
+                                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-8 pt-6 border-t border-gray-200">
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={handleReset}
+                                    className="bg-gray-100 text-gray-600 py-2 px-4 rounded-lg hover:bg-gray-200 transition duration-200 font-medium text-sm"
+                                    title="Alle Einstellungen zurücksetzen"
+                                >
+                                    ↺ Zurücksetzen
+                                </button>
+                                <button
+                                    onClick={handleShowConfirmation}
+                                    className="flex-1 bg-blue-600 text-white py-4 px-6 rounded-lg hover:bg-blue-700 transition duration-200 font-medium text-lg"
+                                >
+                                    🏆 Turnier starten
+                                </button>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function TournamentConfirmation({ config, players, onConfirm, onCancel }) {
+            const totalMatches = config.doubleRoundRobin 
+                ? (config.numPlayers * (config.numPlayers - 1))
+                : (config.numPlayers * (config.numPlayers - 1)) / 2;
+
+            return (
+                <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl">
+                        <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
+                            🏆 Turnier Bestätigung
+                        </h1>
+                        
+                        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+                            <div className="flex">
+                                <div className="ml-3">
+                                    <p className="text-sm text-blue-700">
+                                        Bitte überprüfe die Einstellungen, bevor das Turnier erstellt wird.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* Turnier Einstellungen */}
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <h3 className="font-semibold text-gray-800 mb-3">Turnier Einstellungen</h3>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="text-gray-600">Spieler:</span>
+                                        <span className="ml-2 font-medium">{config.numPlayers}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-600">Fernseher/Beamer:</span>
+                                        <span className="ml-2 font-medium">{config.numTVs}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-600">Gruppenphase:</span>
+                                        <span className="ml-2 font-medium">
+                                            {config.doubleRoundRobin ? 'Hin- & Rückrunde' : 'Nur Hinrunde'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-600">Spiel um Platz 3:</span>
+                                        <span className="ml-2 font-medium">
+                                            {config.thirdPlacePlayoff ? 'Ja' : 'Nein'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-600">Tiebreaker:</span>
+                                        <span className="ml-2 font-medium">
+                                            {config.tiebreaker === 'goalDiff' ? 'Torverhältnis' : 'Direktbegegnung'}
+                                        </span>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <span className="text-gray-600">Gruppenspiele gesamt:</span>
+                                        <span className="ml-2 font-medium text-blue-600">{totalMatches} Spiele</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Spieler Liste */}
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <h3 className="font-semibold text-gray-800 mb-3">Teilnehmer</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {players.slice(0, config.numPlayers).map((player, index) => (
+                                        <div key={index} className="bg-white p-3 rounded border">
+                                            <div className="font-medium text-gray-800">{player.name}</div>
+                                            {player.team && (
+                                                <div className="text-sm text-gray-600">{player.team}</div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Buttons */}
+                        <div className="flex space-x-4 mt-8 pt-6 border-t border-gray-200">
+                            <button
+                                onClick={onCancel}
+                                className="flex-1 bg-gray-200 text-gray-800 py-3 px-6 rounded-lg hover:bg-gray-300 transition duration-200 font-medium"
+                            >
+                                ← Zurück bearbeiten
+                            </button>
+                            <button
+                                onClick={onConfirm}
+                                className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-200 font-medium"
+                            >
+                                ✓ Turnier erstellen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function GroupPhase({ players, matches, standings, updateMatchResult, startKnockout, tournamentId, config, createdAt, updateMetaTags, setPhase, knockoutMatches }) {
+            const completedMatches = matches.filter(m => m.homeGoals !== null && m.awayGoals !== null);
+            const totalMatches = matches.length;
+            const progress = (completedMatches.length / totalMatches) * 100;
+
+            const handleShare = async () => {
+                const url = `${window.location.origin}${window.location.pathname}?turnier=${tournamentId}`;
+                const shareText = updateMetaTags();
+                
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Turnier Manager',
+                            text: shareText,
+                            url: url
+                        });
+                    } catch (err) {
+                        // Fallback to clipboard
+                        copyToClipboard(url);
+                    }
+                } else {
+                    copyToClipboard(url);
+                }
+            };
+
+            const copyToClipboard = async (text) => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    alert('Link in Zwischenablage kopiert!');
+                } catch (err) {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('Link in Zwischenablage kopiert!');
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    <div className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 py-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">
+                                        🏆 Gruppenphase - Turnier {tournamentId}
+                                    </h1>
+                                    <div className="text-sm text-gray-500 mt-1">
+                                        Erstellt am {createdAt || new Date().toLocaleDateString('de-DE', { 
+                                            day: '2-digit', 
+                                            month: '2-digit', 
+                                            year: 'numeric'
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-sm text-gray-600 mb-2">
+                                        {completedMatches.length} / {totalMatches} Spiele gespielt
+                                    </div>
+                                    <button
+                                        onClick={handleShare}
+                                        className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+                                        title="Turnier teilen"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                                        </svg>
+                                        Teilen
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="mt-2">
+                                <div className="bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${progress}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-7xl mx-auto px-4 py-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-xl font-bold">Live Tabelle</h2>
+                                    <div className="group relative">
+                                        <button className="text-gray-400 hover:text-gray-600">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </button>
+                                        <div className="absolute right-0 top-8 w-80 bg-gray-800 text-white text-xs rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                                            <div className="font-semibold mb-2">Sortierung bei Punktegleichstand:</div>
+                                            <div className="space-y-1">
+                                                <div>1. Direktbegegnung (falls aktiviert)</div>
+                                                <div>2. Tordifferenz</div>
+                                                <div>3. Geschossene Tore</div>
+                                                <div>4. Weniger kassierte Tore</div>
+                                                <div>5. Mehr Siege</div>
+                                                <div>6. Weniger Niederlagen</div>
+                                                <div>7. Alphabetische Reihenfolge</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-lg shadow overflow-hidden">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platz</th>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Spieler</th>
+                                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sp</th>
+                                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pkt</th>
+                                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Diff</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {standings.map((standing, index) => {
+                                                let bgColor = '';
+                                                if (index < 4) {
+                                                    bgColor = 'bg-green-50'; // Top 4 (K.O. um Platz 1-4)
+                                                } else if (index === standings.length - 1) {
+                                                    bgColor = 'bg-red-50'; // Letzter Platz
+                                                } else if (standings.length >= 7 && index >= standings.length - 3) {
+                                                    bgColor = 'bg-orange-50'; // Bei 7+ Spielern: vorletzter und drittletzter
+                                                } else if (standings.length === 6 && index >= 4) {
+                                                    bgColor = 'bg-orange-50'; // Bei 6 Spielern: 5. und 6.
+                                                } else if (standings.length === 5 && index === 4) {
+                                                    bgColor = 'bg-orange-50'; // Bei 5 Spielern: 5.
+                                                }
+                                                
+                                                return (
+                                                <tr key={standing.playerId} 
+                                                    className={bgColor}>
+                                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{index + 1}.</td>
+                                                    <td className="px-4 py-3">
+                                                        <div>
+                                                            <div className="text-sm font-medium text-gray-900">
+                                                                {players[standing.playerId]?.name}
+                                                            </div>
+                                                            <div className="text-sm text-gray-500">
+                                                                {players[standing.playerId]?.team}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center text-sm text-gray-900">{standing.played}</td>
+                                                    <td className="px-4 py-3 text-center text-sm font-medium text-gray-900">{standing.points}</td>
+                                                    <td className="px-4 py-3 text-center text-sm text-gray-900">
+                                                        {standing.goalDiff > 0 ? '+' : ''}{standing.goalDiff}
+                                                    </td>
+                                                </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h2 className="text-xl font-bold mb-4">Spielplan</h2>
+                                {config.numTVs === 2 ? (
+                                    <div className="grid grid-cols-2 gap-3 md:gap-6">
+                                        <div>
+                                            <h3 className="text-sm md:text-lg font-medium mb-3 text-center bg-blue-100 p-2 md:p-3 rounded-lg">📺 Fernseher/Beamer 1</h3>
+                                            <div className="space-y-2 md:space-y-4">
+                                                {matches.filter(match => match.tv === 1).map((match) => (
+                                                    <MatchCard 
+                                                        key={match.id}
+                                                        match={match}
+                                                        players={players}
+                                                        updateMatchResult={updateMatchResult}
+                                                        showTV={false}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm md:text-lg font-medium mb-3 text-center bg-yellow-100 p-2 md:p-3 rounded-lg">📺 Fernseher/Beamer 2</h3>
+                                            <div className="space-y-2 md:space-y-4">
+                                                {matches.filter(match => match.tv === 2).map((match) => (
+                                                    <MatchCard 
+                                                        key={match.id}
+                                                        match={match}
+                                                        players={players}
+                                                        updateMatchResult={updateMatchResult}
+                                                        showTV={false}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {matches.map((match) => (
+                                            <MatchCard 
+                                                key={match.id}
+                                                match={match}
+                                                players={players}
+                                                updateMatchResult={updateMatchResult}
+                                                showTV={true}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {completedMatches.length === totalMatches && (
+                                    <div className="mt-6 space-y-3">
+                                        <button
+                                            onClick={startKnockout}
+                                            className="w-full bg-purple-600 text-white py-3 px-6 rounded-md hover:bg-purple-700 transition duration-200 font-medium"
+                                        >
+                                            K.O.-Phase starten
+                                        </button>
+                                        
+                                        {knockoutMatches.length > 0 && (
+                                            <button
+                                                onClick={() => setPhase('knockout')}
+                                                className="w-full bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 transition duration-200 font-medium flex items-center justify-center gap-2"
+                                            >
+                                                Zur bestehenden K.O.-Phase
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function MatchCard({ match, players, updateMatchResult, showTV = true }) {
+            const [homeGoals, setHomeGoals] = useState(match.homeGoals?.toString() || '');
+            const [awayGoals, setAwayGoals] = useState(match.awayGoals?.toString() || '');
+            const [isEditing, setIsEditing] = useState(false);
+            const isCompleted = match.homeGoals !== null && match.awayGoals !== null;
+
+            const handleSubmit = (e) => {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                
+                if (homeGoals !== '' && awayGoals !== '') {
+                    // Store current scroll position
+                    const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+                    
+                    // Disable scroll restoration temporarily
+                    if ('scrollRestoration' in history) {
+                        history.scrollRestoration = 'manual';
+                    }
+                    
+                    updateMatchResult(match.id, homeGoals, awayGoals);
+                    setIsEditing(false);
+                    
+                    // Use multiple timeout strategies to ensure scroll position is maintained
+                    const restoreScroll = () => {
+                        window.scrollTo({
+                            top: scrollPosition,
+                            left: 0,
+                            behavior: 'instant'
+                        });
+                    };
+                    
+                    requestAnimationFrame(() => {
+                        restoreScroll();
+                        setTimeout(restoreScroll, 10);
+                        setTimeout(restoreScroll, 50);
+                        setTimeout(() => {
+                            restoreScroll();
+                            // Re-enable scroll restoration
+                            if ('scrollRestoration' in history) {
+                                history.scrollRestoration = 'auto';
+                            }
+                        }, 100);
+                    });
+                }
+            };
+
+            const handleEdit = () => {
+                setIsEditing(true);
+            };
+
+            return (
+                <div className={`bg-white rounded-lg shadow p-4 ${isCompleted ? 'bg-gray-50' : ''}`}>
+                    <div className="flex justify-between items-center mb-3">
+                        <div className="text-sm text-gray-500">
+                            Runde {match.round}{showTV && ` • Fernseher/Beamer ${match.tv}`}
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col space-y-3">
+                        {/* Spieler Namen */}
+                        <div className="flex justify-between items-center">
+                            <div className="text-right flex-1 pr-2">
+                                <div className="font-medium text-sm truncate">
+                                    {match.homePlayer === 'TBD_loser_semi' ? 'Sieger Verlierer-HF' : players[match.homePlayer]?.name}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                    {match.homePlayer === 'TBD_loser_semi' ? '' : players[match.homePlayer]?.team}
+                                </div>
+                            </div>
+                            <div className="text-center px-2">
+                                <span className="text-lg font-bold">vs</span>
+                            </div>
+                            <div className="text-left flex-1 pl-2">
+                                <div className="font-medium text-sm truncate">
+                                    {match.awayPlayer === 'TBD_loser_semi' ? 'Sieger Verlierer-HF' : players[match.awayPlayer]?.name}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                    {match.awayPlayer === 'TBD_loser_semi' ? '' : players[match.awayPlayer]?.team}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Ergebnis/Eingabe */}
+                        <div className="text-center">
+                            {isCompleted && !isEditing ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <div className="text-xl font-bold bg-gray-100 py-2 px-4 rounded flex items-center gap-2">
+                                        {match.homeGoals} : {match.awayGoals}
+                                        <button
+                                            onClick={handleEdit}
+                                            className="text-gray-500 hover:text-blue-600 transition-colors"
+                                            title="Ergebnis bearbeiten"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={homeGoals}
+                                        onChange={(e) => setHomeGoals(e.target.value)}
+                                        className="w-16 p-2 text-center border rounded-md focus:ring-2 focus:ring-blue-500"
+                                        placeholder="0"
+                                    />
+                                    <span className="text-xl font-bold">:</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={awayGoals}
+                                        onChange={(e) => setAwayGoals(e.target.value)}
+                                        className="w-16 p-2 text-center border rounded-md focus:ring-2 focus:ring-blue-500"
+                                        placeholder="0"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {(!isCompleted || isEditing) && homeGoals !== '' && awayGoals !== '' && (
+                        <div className="mt-3">
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                className="w-full py-2 px-4 rounded-md transition duration-200 bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                                {isEditing ? 'Änderungen speichern' : 'Ergebnis speichern'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function KnockoutPhase({ players, knockoutMatches, updateKnockoutResult, tournamentId, createdAt, config, finishTournament, updateMetaTags, setPhase }) {
+            const topBracket = knockoutMatches.filter(m => m.bracket === 'top');
+            const bottomBracket = knockoutMatches.filter(m => m.bracket === 'bottom');
+
+            const handleShare = async () => {
+                const url = `${window.location.origin}${window.location.pathname}?turnier=${tournamentId}`;
+                const shareText = updateMetaTags();
+                
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Turnier Manager',
+                            text: shareText,
+                            url: url
+                        });
+                    } catch (err) {
+                        copyToClipboard(url);
+                    }
+                } else {
+                    copyToClipboard(url);
+                }
+            };
+
+            const copyToClipboard = async (text) => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    alert('Link in Zwischenablage kopiert!');
+                } catch (err) {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('Link in Zwischenablage kopiert!');
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    <div className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 py-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">
+                                        🏆 K.O.-Phase - Turnier {tournamentId}
+                                    </h1>
+                                    <div className="text-sm text-gray-500 mt-1">
+                                        Erstellt am {createdAt || new Date().toLocaleDateString('de-DE', { 
+                                            day: '2-digit', 
+                                            month: '2-digit', 
+                                            year: 'numeric'
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <button
+                                        onClick={handleShare}
+                                        className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+                                        title="Turnier teilen"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                                        </svg>
+                                        Teilen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-7xl mx-auto px-4 py-6">
+                        
+                        {/* Navigation Buttons */}
+                        <div className="flex justify-between items-center mb-6">
+                            <button 
+                                onClick={() => setPhase('group')}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                                Zurück zur Gruppenphase
+                            </button>
+                            {knockoutMatches.every(m => m.homeGoals !== null) && (
+                                <button 
+                                    onClick={finishTournament}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                                >
+                                    Zur Endtabelle
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                        
+                        <div className="space-y-8">
+                            {topBracket.length > 0 && (
+                                <div>
+                                    <h2 className="text-xl font-bold mb-4 text-gray-800">
+                                        🥇 Kampf um Platz 1-4
+                                    </h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {topBracket.map((match) => (
+                                            <KnockoutMatchCard
+                                                key={match.id}
+                                                match={match}
+                                                players={players}
+                                                updateKnockoutResult={updateKnockoutResult}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {bottomBracket.length > 0 && (
+                                <div>
+                                    <h2 className="text-xl font-bold mb-4 text-gray-800">
+                                        🏃‍♂️ Kampf um letzte Plätze
+                                    </h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {bottomBracket.map((match) => (
+                                            <KnockoutMatchCard
+                                                key={match.id}
+                                                match={match}
+                                                players={players}
+                                                updateKnockoutResult={updateKnockoutResult}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Finish Tournament Button */}
+                        <div className="mt-8 pt-6 border-t border-gray-200">
+                            <div className="text-center">
+                                <button
+                                    onClick={finishTournament}
+                                    className="bg-green-600 text-white py-3 px-8 rounded-lg hover:bg-green-700 transition duration-200 font-medium"
+                                >
+                                    ✓ Turnier abschließen
+                                </button>
+                                <p className="text-sm text-gray-600 mt-2">
+                                    Schließe das Turnier ab, um die Endphase zu erreichen
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function KnockoutMatchCard({ match, players, updateKnockoutResult }) {
+            const [homeGoals, setHomeGoals] = useState(match.homeGoals?.toString() || '');
+            const [awayGoals, setAwayGoals] = useState(match.awayGoals?.toString() || '');
+            const [isEditing, setIsEditing] = useState(false);
+            const isCompleted = match.homeGoals !== null && match.awayGoals !== null;
+            const isFinal = match.type === 'final' || match.type === 'third';
+
+            const handleSubmit = (e) => {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                
+                if (homeGoals !== '' && awayGoals !== '' && homeGoals !== awayGoals) {
+                    const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+                    
+                    if ('scrollRestoration' in history) {
+                        history.scrollRestoration = 'manual';
+                    }
+                    
+                    updateKnockoutResult(match.id, homeGoals, awayGoals);
+                    setIsEditing(false);
+                    
+                    const restoreScroll = () => {
+                        window.scrollTo({
+                            top: scrollPosition,
+                            left: 0,
+                            behavior: 'instant'
+                        });
+                    };
+                    
+                    requestAnimationFrame(() => {
+                        restoreScroll();
+                        setTimeout(restoreScroll, 10);
+                        setTimeout(restoreScroll, 50);
+                        setTimeout(() => {
+                            restoreScroll();
+                            if ('scrollRestoration' in history) {
+                                history.scrollRestoration = 'auto';
+                            }
+                        }, 100);
+                    });
+                }
+            };
+
+            const handleEdit = () => {
+                setIsEditing(true);
+            };
+
+            const getMatchTitle = () => {
+                switch(match.type) {
+                    case 'semi': return 'Halbfinale';
+                    case 'final': return '🏆 Finale';
+                    case 'third': return '🥉 Spiel um Platz 3';
+                    case 'loser_semi': return 'Verlierer-Halbfinale';
+                    case 'loser_final': return 'Verlierer-Finale';
+                    case 'bottom': return 'Platzierungsspiel';
+                    default: return 'K.O.-Spiel';
+                }
+            };
+
+            return (
+                <div className={`bg-white rounded-lg shadow p-4 ${isFinal ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''}`}>
+                    <div className="flex justify-between items-center mb-3">
+                        <div className={`text-sm font-medium ${isFinal ? 'text-yellow-700' : 'text-gray-600'}`}>
+                            {getMatchTitle()}
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col space-y-3">
+                        {/* Spieler Namen */}
+                        <div className="flex justify-between items-center">
+                            <div className="text-right flex-1 pr-2">
+                                <div className="font-medium text-sm truncate">
+                                    {match.homePlayer === 'TBD_loser_semi' ? 'Sieger Verlierer-HF' : players[match.homePlayer]?.name}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                    {match.homePlayer === 'TBD_loser_semi' ? '' : players[match.homePlayer]?.team}
+                                </div>
+                            </div>
+                            <div className="text-center px-2">
+                                <span className="text-lg font-bold">vs</span>
+                            </div>
+                            <div className="text-left flex-1 pl-2">
+                                <div className="font-medium text-sm truncate">
+                                    {match.awayPlayer === 'TBD_loser_semi' ? 'Sieger Verlierer-HF' : players[match.awayPlayer]?.name}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                    {match.awayPlayer === 'TBD_loser_semi' ? '' : players[match.awayPlayer]?.team}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Ergebnis/Eingabe */}
+                        <div className="text-center">
+                            {isCompleted && !isEditing ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <div className={`text-xl font-bold ${isFinal ? 'bg-yellow-100' : 'bg-gray-100'} py-2 px-4 rounded flex items-center gap-2`}>
+                                        {match.homeGoals} : {match.awayGoals}
+                                        <button
+                                            onClick={handleEdit}
+                                            className="text-gray-500 hover:text-blue-600 transition-colors"
+                                            title="Ergebnis bearbeiten"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={homeGoals}
+                                        onChange={(e) => setHomeGoals(e.target.value)}
+                                        className="w-16 p-2 text-center border rounded-md focus:ring-2 focus:ring-blue-500"
+                                        placeholder="0"
+                                    />
+                                    <span className="text-xl font-bold">:</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={awayGoals}
+                                        onChange={(e) => setAwayGoals(e.target.value)}
+                                        className="w-16 p-2 text-center border rounded-md focus:ring-2 focus:ring-blue-500"
+                                        placeholder="0"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {(!isCompleted || isEditing) && homeGoals !== '' && awayGoals !== '' && homeGoals !== awayGoals && (
+                        <div className="mt-3">
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                className="w-full py-2 px-4 rounded-md transition duration-200 bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                                {isEditing ? 'Änderungen speichern' : 'Ergebnis speichern'}
+                            </button>
+                        </div>
+                    )}
+                    
+                    {(!isCompleted || isEditing) && homeGoals !== '' && awayGoals !== '' && homeGoals === awayGoals && (
+                        <div className="mt-3 text-center text-red-600 text-sm font-medium">
+                            ⚠️ Unentschieden nicht erlaubt!
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function FinishedPhase({ players, winner, loser, standings, setPhase, setTournamentId, knockoutMatches, config, tournamentId, createdAt, updateMetaTags }) {
+            const newTournament = () => {
+                setPhase('setup');
+                setTournamentId(null);
+                window.history.pushState({}, '', window.location.pathname);
+            };
+
+            // Calculate final ranking based on knockout results
+            const calculateFinalRanking = () => {
+                const finalRanking = [];
+                const usedPlayerIds = new Set();
+
+                // 1st place: Winner
+                if (winner !== null) {
+                    finalRanking.push({ playerId: winner, rank: 1, position: "Sieger" });
+                    usedPlayerIds.add(winner);
+                }
+
+                // 2nd place: Loser (runner-up from final)
+                if (loser !== null) {
+                    finalRanking.push({ playerId: loser, rank: 2, position: "2. Platz" });
+                    usedPlayerIds.add(loser);
+                }
+
+                // Find 3rd place playoff result
+                const thirdPlaceMatch = knockoutMatches.find(m => m.type === 'third');
+                if (thirdPlaceMatch && thirdPlaceMatch.homeGoals !== null) {
+                    const thirdPlaceWinner = thirdPlaceMatch.homeGoals > thirdPlaceMatch.awayGoals 
+                        ? thirdPlaceMatch.homePlayer 
+                        : thirdPlaceMatch.awayPlayer;
+                    const fourthPlace = thirdPlaceMatch.homeGoals > thirdPlaceMatch.awayGoals 
+                        ? thirdPlaceMatch.awayPlayer 
+                        : thirdPlaceMatch.homePlayer;
+                    
+                    finalRanking.push({ playerId: thirdPlaceWinner, rank: 3, position: "3. Platz" });
+                    finalRanking.push({ playerId: fourthPlace, rank: 4, position: "4. Platz" });
+                    usedPlayerIds.add(thirdPlaceWinner);
+                    usedPlayerIds.add(fourthPlace);
+                } else {
+                    // No 3rd place playoff - semi-final losers share 3rd place
+                    const semiFinals = knockoutMatches.filter(m => m.type === 'semi' && m.homeGoals !== null);
+                    const semiLosers = semiFinals.map(sf => 
+                        sf.homeGoals > sf.awayGoals ? sf.awayPlayer : sf.homePlayer
+                    ).filter(id => !usedPlayerIds.has(id));
+                    
+                    semiLosers.forEach(playerId => {
+                        finalRanking.push({ playerId, rank: 3, position: "3. Platz" });
+                        usedPlayerIds.add(playerId);
+                    });
+                }
+
+                // Add remaining players based on group stage standings
+                const remainingPlayers = standings
+                    .filter(s => !usedPlayerIds.has(s.playerId))
+                    .sort((a, b) => {
+                        if (a.points !== b.points) return b.points - a.points;
+                        if (a.goalDiff !== b.goalDiff) return b.goalDiff - a.goalDiff;
+                        return b.goalsFor - a.goalsFor;
+                    });
+
+                let currentRank = finalRanking.length + 1;
+                remainingPlayers.forEach(player => {
+                    finalRanking.push({ 
+                        playerId: player.playerId, 
+                        rank: currentRank, 
+                        position: `${currentRank}. Platz` 
+                    });
+                    currentRank++;
+                });
+
+                return finalRanking;
+            };
+
+            const finalRanking = calculateFinalRanking();
+            const lastPlace = finalRanking[finalRanking.length - 1];
+
+
+            const handleShare = async () => {
+                const url = `${window.location.origin}${window.location.pathname}?turnier=${tournamentId}`;
+                const shareText = updateMetaTags();
+                
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Turnier Manager',
+                            text: shareText,
+                            url: url
+                        });
+                    } catch (err) {
+                        copyToClipboard(url);
+                    }
+                } else {
+                    copyToClipboard(url);
+                }
+            };
+
+            const copyToClipboard = async (text) => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    alert('Link in Zwischenablage kopiert!');
+                } catch (err) {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('Link in Zwischenablage kopiert!');
+                }
+            };
+
+            return (
+                <div className="min-h-screen finished-bg">
+                    <div className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 py-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">
+                                        🏆 Turnier beendet - Turnier {tournamentId}
+                                    </h1>
+                                    <div className="text-sm text-gray-500 mt-1">
+                                        Erstellt am {createdAt || new Date().toLocaleDateString('de-DE', { 
+                                            day: '2-digit', 
+                                            month: '2-digit', 
+                                            year: 'numeric'
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <button
+                                        onClick={handleShare}
+                                        className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+                                        title="Turnier teilen"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                                        </svg>
+                                        Teilen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto px-4 py-8">
+                        
+                        
+                        <div id="tournament-results" className="bg-white rounded-lg shadow-xl p-8 mb-6">
+                            {/* Winner and Last Place prominently displayed */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                <div className="text-center bg-yellow-50 rounded-lg p-6 border-2 border-yellow-400">
+                                    <div className="text-6xl mb-4">🏆</div>
+                                    <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                                        SIEGER
+                                    </h2>
+                                    <div className="text-xl font-semibold text-gray-800">
+                                        {players[winner]?.name}
+                                    </div>
+                                    <div className="text-lg text-gray-600">
+                                        {players[winner]?.team}
+                                    </div>
+                                </div>
+
+                                <div className="text-center bg-red-50 rounded-lg p-6 border-2 border-red-400">
+                                    <div className="text-6xl mb-4">😢</div>
+                                    <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                                        LETZTER PLATZ
+                                    </h2>
+                                    <div className="text-xl font-semibold text-gray-800">
+                                        {players[lastPlace?.playerId]?.name}
+                                    </div>
+                                    <div className="text-lg text-gray-600">
+                                        {players[lastPlace?.playerId]?.team}
+                                    </div>
+                                </div>
+                                </div>
+
+                            {/* Complete Final Ranking */}
+                            <div>
+                                <h3 className="text-2xl font-bold mb-4 text-center text-gray-800">Endrangfolge</h3>
+                                <div className="space-y-3">
+                                    {finalRanking.map((rankEntry, index) => {
+                                        const isWinner = rankEntry.rank === 1;
+                                        const isSecond = rankEntry.rank === 2;
+                                        const thirdPlaceMatch = knockoutMatches.find(m => m.type === 'third');
+                                        const hasThirdPlacePlayoff = thirdPlaceMatch && thirdPlaceMatch.homeGoals !== null;
+                                        const isThird = rankEntry.rank === 3 && hasThirdPlacePlayoff;
+                                        const isLast = rankEntry.playerId === lastPlace?.playerId;
+                                        
+                                        return (
+                                            <div key={rankEntry.playerId} className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+                                                isWinner ? 'bg-yellow-50 border-yellow-400' : 
+                                                isSecond ? 'bg-gray-50 border-gray-400' :
+                                                isThird ? 'bg-orange-50 border-orange-300' : 
+                                                isLast ? 'bg-red-50 border-red-400' :
+                                                'bg-white border-gray-200'
+                                            }`}>
+                                                <div className="flex items-center space-x-4">
+                                                    <div className={`text-2xl font-bold w-12 h-12 rounded-full flex items-center justify-center ${
+                                                        isWinner ? 'bg-yellow-400 text-yellow-900' : 
+                                                        isSecond ? 'bg-gray-400 text-gray-900' :
+                                                        isThird ? 'bg-orange-400 text-orange-900' : 
+                                                        isLast ? 'bg-red-400 text-red-900' :
+                                                        'bg-gray-100 text-gray-600'
+                                                    }`}>
+                                                        {rankEntry.rank === 1 ? '🏆' : 
+                                                         rankEntry.rank === 2 ? '🥈' : 
+                                                         isThird ? '🥉' : 
+                                                         rankEntry.rank}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-lg font-semibold text-gray-800">
+                                                            {players[rankEntry.playerId]?.name}
+                                                        </div>
+                                                        {players[rankEntry.playerId]?.team && (
+                                                            <div className="text-sm text-gray-600">
+                                                                {players[rankEntry.playerId]?.team}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm text-gray-500">
+                                                        {rankEntry.rank === 1 ? 'Sieger' : 
+                                                         rankEntry.rank === 2 ? '2. Platz' : 
+                                                         isThird ? '3. Platz' : 
+                                                         `${rankEntry.rank}. Platz`}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="text-center space-y-4">
+                            <button
+                                onClick={newTournament}
+                                className="bg-blue-600 text-white py-3 px-8 rounded-md hover:bg-blue-700 transition duration-200 font-medium"
+                            >
+                                Neues Turnier starten
+                            </button>
+                            
+                            {/* Subtle navigation links */}
+                            <div className="flex justify-center gap-6 pt-4 border-t border-gray-200">
+                                <button 
+                                    onClick={() => setPhase('group')}
+                                    className="text-sm text-gray-500 hover:text-gray-700 underline transition-colors"
+                                >
+                                    Ergebnisse der Gruppenphase anzeigen
+                                </button>
+                                <button 
+                                    onClick={() => setPhase('knockout')}
+                                    className="text-sm text-gray-500 hover:text-gray-700 underline transition-colors"
+                                >
+                                    Ergebnisse der K.O.-Phase anzeigen
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<TournamentApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>

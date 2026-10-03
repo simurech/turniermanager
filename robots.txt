@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Disallow crawling of API endpoints and data directory
+Disallow: /api.php
+Disallow: /data/
+Disallow: /data/*

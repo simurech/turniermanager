@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup – Retro-Fussball</title>
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Bebas+Neue&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f2e8cf;--paper2:#e9dcba;--ink:#1d2b53;--red:#c8372d;--grn:#2f6b3a;--mus:#e8a921;--line:#1d2b53}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#cdbf9a;color:var(--ink);font-family:'Courier Prime',monospace;padding:32px 16px;display:flex;flex-wrap:wrap;gap:32px;justify-content:center}
+.cap{width:100%;text-align:center;color:#6e6243;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.phone{width:390px;height:800px;background:var(--paper);border-radius:44px;border:10px solid var(--ink);overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 24px 60px #3d331a55;background-image:radial-gradient(#00000010 1px,transparent 1px);background-size:6px 6px}
+.status{height:34px;display:flex;justify-content:space-between;align-items:center;padding:0 26px;font-size:12px;font-weight:700}
+.scroll{flex:1;overflow:hidden;padding:6px 16px 0}
+.logo{font-family:'Alfa Slab One';font-size:30px;line-height:1;color:var(--red);text-shadow:3px 3px 0 var(--ink)}
+.sub{font-family:'Bebas Neue';letter-spacing:.2em;font-size:14px;margin-top:6px}
+h2{font-family:'Bebas Neue';font-size:22px;letter-spacing:.08em;margin:18px 0 8px;display:flex;align-items:center;gap:10px}
+h2:after{content:"";flex:1;border-top:3px double var(--ink)}
+.banner{background:var(--red);color:var(--paper);border:3px solid var(--ink);box-shadow:5px 5px 0 var(--ink);border-radius:6px;padding:16px;margin-top:14px;text-align:center;transform:rotate(-1deg)}
+.banner small{font-family:'Bebas Neue';letter-spacing:.18em;font-size:15px;background:var(--ink);padding:2px 10px;display:inline-block}
+.banner .v{display:flex;justify-content:space-between;align-items:center;margin:12px 0}
+.banner b{font-family:'Alfa Slab One';font-size:20px;font-weight:400}
+.banner .x{font-family:'Bebas Neue';font-size:34px;color:var(--mus)}
+.btn{display:block;text-align:center;background:var(--mus);color:var(--ink);font-family:'Alfa Slab One';font-size:17px;padding:13px;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);border-radius:6px}
+.btn.alt{background:var(--paper)}
+.card{display:flex;align-items:center;gap:12px;background:#fffaf0;border:2.5px solid var(--ink);box-shadow:4px 4px 0 var(--ink);border-radius:6px;padding:10px 12px;margin:0 4px 12px 0}
+.sticker{width:52px;height:64px;background:linear-gradient(135deg,var(--mus),#f6d36b);border:2.5px solid var(--ink);display:grid;place-items:center;font-size:24px;border-radius:4px;position:relative;flex:none}
+.sticker:after{content:"";position:absolute;inset:3px;border:1px dashed var(--ink);border-radius:2px}
+.card .yr{font-family:'Bebas Neue';font-size:26px;line-height:1;color:var(--red)}
+.card b{font-family:'Alfa Slab One';font-weight:400;font-size:17px;display:block}
+.card small{font-size:12px}
+.tabbar{height:78px;background:var(--ink);display:flex;justify-content:space-around;align-items:center;padding-bottom:14px;color:var(--paper)}
+.tab{text-align:center;font-family:'Bebas Neue';letter-spacing:.1em;font-size:14px;opacity:.65}
+.tab i{display:block;font-style:normal;font-size:20px}
+.tab.on{opacity:1;color:var(--mus)}
+.input{border:2.5px solid var(--ink);background:#fffaf0;border-radius:6px;padding:12px;font-size:14px;margin:0 4px 0 0;box-shadow:3px 3px 0 var(--ink)}
+.tbl{background:#fffaf0;border:3px solid var(--ink);box-shadow:5px 5px 0 var(--ink);margin-right:5px}
+.th,.tr{display:grid;grid-template-columns:26px 1fr 28px 38px 38px;gap:6px;align-items:center;padding:9px 12px}
+.th{background:var(--ink);color:var(--paper);font-family:'Bebas Neue';letter-spacing:.1em;font-size:15px}
+.tr{border-bottom:1.5px dashed #1d2b5360;font-size:14px}
+.tr:last-child{border:0}
+.tr .r{font-family:'Alfa Slab One';color:var(--red)}
+.tr .pt{font-family:'Alfa Slab One';text-align:right;font-size:17px}
+.tr .n{font-weight:700;line-height:1.2}
+.tr .n small{display:block;font-weight:400;font-size:11px}
+.tr.m{background:#e8a92133}
+.tr.v{background:#c8372d22}
+.tag{font-family:'Bebas Neue';letter-spacing:.06em;font-size:12px;padding:1px 6px;border:1.5px solid var(--ink);border-radius:3px;margin-left:4px;background:var(--mus)}
+.tag.v{background:var(--red);color:var(--paper)}
+.dots{display:flex;gap:3px;margin-top:3px}
+.dots s{width:9px;height:9px;display:block;border:1.5px solid var(--ink);border-radius:50%}
+.w{background:var(--grn)}.d{background:var(--paper2)}.l{background:var(--red)}
+.odds{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-right:4px}
+.odd{background:#fffaf0;border:2.5px solid var(--ink);box-shadow:3px 3px 0 var(--ink);text-align:center;padding:8px;border-radius:6px}
+.odd small{display:block;font-size:12px}
+.odd b{font-family:'Alfa Slab One';font-weight:400;font-size:24px;color:var(--red)}
+.tip{background:var(--mus);border:2.5px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:10px 12px;font-size:13px;margin:12px 4px 0 0;border-radius:6px}
+.big{background:var(--grn);color:var(--paper);border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);border-radius:6px;padding:18px;text-align:center;margin:8px 6px 0 0}
+.big .cup{font-size:50px}
+.big small{font-family:'Bebas Neue';letter-spacing:.2em;font-size:16px}
+.big h1{font-family:'Alfa Slab One';font-weight:400;font-size:40px;color:var(--mus);text-shadow:3px 3px 0 var(--ink);line-height:1.1}
+.polaroid{background:#fffaf0;border:2.5px solid var(--ink);padding:8px 8px 22px;width:220px;margin:14px auto 0;transform:rotate(2.5deg);box-shadow:4px 4px 0 var(--ink);color:var(--ink)}
+.polaroid div{height:110px;background:linear-gradient(135deg,#b9a77a,#8c7b52);display:grid;place-items:center;font-size:13px;color:#fffaf0}
+.polaroid span{display:block;font-size:12px;text-align:center;margin-top:6px;font-weight:700}
+.lose{background:#fffaf0;border:2.5px dashed var(--red);padding:10px;margin:14px 6px 0 0;font-size:13px;border-radius:6px}
+.rk{display:flex;gap:12px;align-items:center;background:#fffaf0;border:2.5px solid var(--ink);padding:8px 12px;margin:0 5px 8px 0;border-radius:6px;box-shadow:3px 3px 0 var(--ink);font-weight:700}
+.rk i{font-style:normal;font-family:'Alfa Slab One';color:var(--red);width:20px}
+.rk em{margin-left:auto;font-style:normal;font-size:20px}
+</style>
+</head>
+<body>
+<div class="cap">Mockup B – Retro-Fussball · reine Optik, nicht funktional</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+  <div class="scroll">
+    <div class="logo">TURNIER<br>MANAGER</div>
+    <div class="sub">★ DIE JÄHRLICHE ENTSCHEIDUNG ★</div>
+    <div class="banner">
+      <small>LÄUFT · GRUPPENPHASE</small>
+      <div class="v"><b>SIMON 👑</b><span class="x">VS</span><b>RETO 🍋</b></div>
+      <a class="btn">ERGEBNIS EINTRAGEN</a>
+    </div>
+    <h2>Ruhmeshalle</h2>
+    <div class="card"><div class="sticker">🏆</div><div><div class="yr">2025</div><b>Simon</b><small>Verlierer: Reto · 7 Spieler</small></div></div>
+    <div class="card"><div class="sticker">🏆</div><div><div class="yr">2024</div><b>Marco</b><small>Verlierer: Dani · 7 Spieler</small></div></div>
+    <div class="card"><div class="sticker">🏆</div><div><div class="yr">2023</div><b>Luca</b><small>Verlierer: Nico · 6 Spieler</small></div></div>
+    <div class="input">🔎 Turnier per Code öffnen …</div>
+  </div>
+  <div style="padding:6px 20px 12px 16px"><a class="btn alt">+ NEUES TURNIER</a></div>
+  <div class="tabbar"><div class="tab on"><i>🏠</i>START</div><div class="tab"><i>📊</i>TABELLE</div><div class="tab"><i>⚽</i>SPIELE</div><div class="tab"><i>📈</i>STATISTIK</div></div>
+</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+  <div class="scroll">
+    <div class="logo" style="font-size:28px">TABELLE</div>
+    <div class="sub">★ SPIEL 9 VON 21 ★</div>
+    <div class="tbl" style="margin-top:14px">
+      <div class="th"><span>#</span><span>SPIELER</span><span>SP</span><span>TD</span><span style="text-align:right">PKT</span></div>
+      <div class="tr"><span class="r">1</span><div class="n">Marco<small>Liverpool</small><div class="dots"><s class="w"></s><s class="w"></s><s class="d"></s></div></div><span>3</span><span>+5</span><span class="pt">7</span></div>
+      <div class="tr m"><span class="r">2</span><div class="n">Simon<span class="tag">👑 MEISTER</span><small>FC Bayern</small><div class="dots"><s class="w"></s><s class="l"></s><s class="w"></s></div></div><span>3</span><span>+2</span><span class="pt">6</span></div>
+      <div class="tr"><span class="r">3</span><div class="n">Luca<small>PSG</small><div class="dots"><s class="d"></s><s class="w"></s><s class="d"></s></div></div><span>3</span><span>+1</span><span class="pt">5</span></div>
+      <div class="tr"><span class="r">4</span><div class="n">Dani<small>Arsenal</small><div class="dots"><s class="l"></s><s class="w"></s><s class="d"></s></div></div><span>3</span><span>0</span><span class="pt">4</span></div>
+      <div class="tr"><span class="r">5</span><div class="n">Jonas<small>Inter</small><div class="dots"><s class="w"></s><s class="l"></s><s class="l"></s></div></div><span>3</span><span>-2</span><span class="pt">3</span></div>
+      <div class="tr"><span class="r">6</span><div class="n">Nico<small>Juventus</small><div class="dots"><s class="l"></s><s class="d"></s><s class="l"></s></div></div><span>3</span><span>-3</span><span class="pt">1</span></div>
+      <div class="tr v"><span class="r">7</span><div class="n">Reto<span class="tag v">🍋 VERLIERER</span><small>Real Madrid</small><div class="dots"><s class="l"></s><s class="l"></s><s class="d"></s></div></div><span>3</span><span>-3</span><span class="pt">1</span></div>
+    </div>
+    <h2>Wettquoten</h2>
+    <div class="odds">
+      <div class="odd"><small>Marco</small><b>2.4</b></div>
+      <div class="odd"><small>Simon</small><b>3.1</b></div>
+      <div class="odd"><small>Luca</small><b>4.8</b></div>
+    </div>
+    <div class="tip">🤖 <b>Computer-Tipp:</b> Marco schlägt Dani mit 2:1 (62 %).</div>
+  </div>
+  <div class="tabbar"><div class="tab"><i>🏠</i>START</div><div class="tab on"><i>📊</i>TABELLE</div><div class="tab"><i>⚽</i>SPIELE</div><div class="tab"><i>📈</i>STATISTIK</div></div>
+</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+  <div class="scroll">
+    <div class="big">
+      <div class="cup">🏆</div>
+      <small>TURNIERSIEGER 2026</small>
+      <h1>MARCO</h1>
+      <small>LIVERPOOL · 7 SIEGE · 24:9</small>
+    </div>
+    <div class="polaroid"><div>📷 Siegerfoto</div><span>Marco &amp; Reto, 2026</span></div>
+    <div class="lose">🍋 <b>Reto</b> muss zur Pressekonferenz. Viel Spass!</div>
+    <h2>Endstand</h2>
+    <div class="rk"><i>1</i>Marco<em>🥇</em></div>
+    <div class="rk"><i>2</i>Simon 👑<em>🥈</em></div>
+  </div>
+  <div style="padding:6px 20px 12px 16px"><a class="btn">AUF WHATSAPP TEILEN</a></div>
+  <div class="tabbar"><div class="tab"><i>🏠</i>START</div><div class="tab"><i>📊</i>TABELLE</div><div class="tab"><i>⚽</i>SPIELE</div><div class="tab on"><i>📈</i>STATISTIK</div></div>
+</div>
+</body>
+</html>
