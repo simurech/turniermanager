@@ -14,8 +14,8 @@ export const isPlayed = (m) => m && m.homeGoals != null && m.awayGoals != null;
 // ------------------------------------------------------------------ Spielplan
 
 /** Alle Paarungen einer Hin-/Rückrunde nach der Kreismethode, mit ausgeglichenem Heimrecht. */
-function legPairings(n) {
-  const ids = Array.from({ length: n }, (_, i) => i);
+function legPairings(n, shift = 0) {
+  const ids = Array.from({ length: n }, (_, i) => (i + shift) % n);
   if (n % 2 === 1) ids.push(null);
   const size = ids.length;
   const pairs = [];
@@ -28,13 +28,106 @@ function legPairings(n) {
     }
     ids.splice(1, 0, ids.pop());
   }
-  // Heimrecht so verteilen, dass jeder Spieler möglichst gleich oft Heim- und Auswärtsspiele hat.
-  const balance = new Array(n).fill(0);
-  return pairs.map(([a, b]) => {
+  return balanceHomeAway(pairs, n);
+}
+
+/** Summe der Quadrate der Abweichungen: je kleiner, desto gleichmässiger. */
+const imbalance = (balance) => balance.reduce((sum, b) => sum + b * b, 0);
+
+/**
+ * Verteilt Heim- und Auswärtsrecht so, dass jeder Spieler möglichst gleich oft zuhause und auswärts spielt.
+ * Erst eine einfache Verteilung, dann werden einzelne Spiele gedreht, solange es die Verteilung verbessert.
+ */
+function balanceHomeAway(pairs, n) {
+  const balance = new Array(n).fill(0); // Heimspiele minus Auswärtsspiele
+  const result = pairs.map(([a, b]) => {
     const [home, away] = balance[a] <= balance[b] ? [a, b] : [b, a];
     balance[home]++;
     balance[away]--;
     return [home, away];
+  });
+  for (let pass = 0; pass < 30; pass++) {
+    let improved = false;
+    result.forEach((pair, i) => {
+      const [home, away] = pair;
+      const before = imbalance(balance);
+      balance[home] -= 2;
+      balance[away] += 2;
+      if (imbalance(balance) < before) {
+        result[i] = [away, home];
+        improved = true;
+      } else {
+        balance[home] += 2;
+        balance[away] -= 2;
+      }
+    });
+    if (!improved) break;
+  }
+  return result;
+}
+
+/**
+ * Verteilt die Spiele bei 2 Fernsehern so auf TV 1 und TV 2, dass jeder Spieler möglichst gleich oft
+ * auf beiden spielt. Pro Runde gibt es nur zwei Möglichkeiten (Fernseher tauschen oder nicht), die Paarungen
+ * bleiben. Bei bis zu 16 Runden wird alles durchprobiert, sonst gibt es viele Suchläufe mit festem Startwert.
+ */
+function balanceTvs(matches, n) {
+  const rounds = [...Map.groupBy(matches, (m) => m.round).values()];
+  const base = new Map(matches.map((m) => [m, m.tv]));
+  const costOf = (flips) => {
+    const balance = new Array(n).fill(0); // Spiele auf TV 1 minus Spiele auf TV 2
+    rounds.forEach((list, r) => {
+      for (const m of list) {
+        const tv = flips[r] ? (base.get(m) === 1 ? 2 : 1) : base.get(m);
+        const d = tv === 1 ? 1 : -1;
+        balance[m.homePlayer] += d;
+        balance[m.awayPlayer] += d;
+      }
+    });
+    return imbalance(balance);
+  };
+
+  let best = new Array(rounds.length).fill(false);
+  let bestCost = costOf(best);
+  if (rounds.length <= 16) {
+    for (let mask = 1; mask < 1 << rounds.length; mask++) {
+      const flips = rounds.map((_, r) => Boolean((mask >> r) & 1));
+      const cost = costOf(flips);
+      if (cost < bestCost) {
+        best = flips;
+        bestCost = cost;
+      }
+    }
+  } else {
+    let seed = 12345;
+    const random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    for (let start = 0; start < 300 && bestCost > 0; start++) {
+      const flips = rounds.map(() => random() < 0.5);
+      let cost = costOf(flips);
+      for (let improved = true; improved; ) {
+        improved = false;
+        for (let r = 0; r < flips.length; r++) {
+          flips[r] = !flips[r];
+          const next = costOf(flips);
+          if (next < cost) {
+            cost = next;
+            improved = true;
+          } else {
+            flips[r] = !flips[r];
+          }
+        }
+      }
+      if (cost < bestCost) {
+        best = [...flips];
+        bestCost = cost;
+      }
+    }
+  }
+  rounds.forEach((list, r) => {
+    if (best[r]) for (const m of list) m.tv = base.get(m) === 1 ? 2 : 1;
   });
 }
 
@@ -42,9 +135,9 @@ function legPairings(n) {
  * Verteilt die Paarungen auf Runden (Zeitfenster). Pro Runde spielen höchstens `numTVs`
  * Spiele gleichzeitig, kein Spieler doppelt. Es werden die Spieler bevorzugt, die am längsten pausiert haben.
  */
-export function scheduleMatches(numPlayers, numTVs = 1, doubleRoundRobin = false) {
-  const legs = [legPairings(numPlayers)];
-  if (doubleRoundRobin) legs.push(legPairings(numPlayers).map(([h, a]) => [a, h]));
+function buildSchedule(numPlayers, numTVs, doubleRoundRobin, shift) {
+  const legs = [legPairings(numPlayers, shift)];
+  if (doubleRoundRobin) legs.push(legPairings(numPlayers, shift).map(([h, a]) => [a, h]));
 
   const lastRound = new Array(numPlayers).fill(-3);
   const matches = [];
@@ -79,7 +172,38 @@ export function scheduleMatches(numPlayers, numTVs = 1, doubleRoundRobin = false
       });
     }
   }
+  if (numTVs === 2) balanceTvs(matches, numPlayers);
   return matches;
+}
+
+/** Abweichung der Fernseher-Verteilung: Summe der Quadrate von (Spiele auf TV 1 minus Spiele auf TV 2) je Spieler. */
+function tvImbalance(matches, n) {
+  const balance = new Array(n).fill(0);
+  for (const m of matches) {
+    const d = m.tv === 1 ? 1 : -1;
+    balance[m.homePlayer] += d;
+    balance[m.awayPlayer] += d;
+  }
+  return imbalance(balance);
+}
+
+/**
+ * Erstellt den Spielplan. Bei 2 Fernsehern werden verschiedene Startreihenfolgen der Spieler probiert
+ * und die gewählt, bei der jeder Spieler am gleichmässigsten auf TV 1 und TV 2 spielt.
+ */
+export function scheduleMatches(numPlayers, numTVs = 1, doubleRoundRobin = false) {
+  if (numTVs !== 2) return buildSchedule(numPlayers, numTVs, doubleRoundRobin, 0);
+  let best = null;
+  let bestCost = Infinity;
+  for (let shift = 0; shift < numPlayers; shift++) {
+    const candidate = buildSchedule(numPlayers, numTVs, doubleRoundRobin, shift);
+    const cost = tvImbalance(candidate, numPlayers);
+    if (cost < bestCost) {
+      best = candidate;
+      bestCost = cost;
+    }
+  }
+  return best;
 }
 
 // ------------------------------------------------------------------ Tabelle

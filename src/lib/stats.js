@@ -154,10 +154,13 @@ export function tipText(doc, history, match) {
   const away = doc.players[match.awayPlayer]?.name;
   const p = predictMatch(strength, home, away);
   const [hs, as] = p.score;
-  const pct = (x) => Math.round(x * 100);
+  // Sieg und Niederlage werden gerundet, das Remis trägt die Rundungsdifferenz. So bleiben gleich starke Spieler gleich.
+  const pHome = Math.round(p.pHome * 100);
+  const pAway = Math.round(p.pAway * 100);
+  const pDraw = 100 - pHome - pAway;
   const favourite = p.pHome >= p.pAway ? [home, p.pHome] : [away, p.pAway];
   const verdict = Math.abs(p.pHome - p.pAway) < 0.08 ? 'Offenes Spiel' : `${favourite[0]} ist Favorit`;
-  return { home, away, score: `${hs}:${as}`, pHome: pct(p.pHome), pDraw: pct(p.pDraw), pAway: pct(p.pAway), verdict, confidence: strength.confidence };
+  return { home, away, score: `${hs}:${as}`, pHome, pDraw, pAway, verdict, confidence: strength.confidence };
 }
 
 // ------------------------------------------------------------------ Wettquoten (Simulation)
@@ -280,4 +283,83 @@ export function hallOfFame(docs) {
   return [...table.values()]
     .map((e) => ({ ...e, winRate: e.played ? e.won / e.played : 0, goalDiff: e.goalsFor - e.goalsAgainst }))
     .sort((a, b) => b.titles - a.titles || b.winRate - a.winRate || a.name.localeCompare(b.name, 'de'));
+}
+
+// ------------------------------------------------------------------ Hilfen für Anzeige
+
+/** Rundet Anteile (Summe 1) auf ganze Prozent, sodass die Summe immer genau 100 ergibt (Methode des grössten Rests). */
+export function roundPercents(values) {
+  const raw = values.map((v) => v * 100);
+  const floors = raw.map(Math.floor);
+  const rest = 100 - floors.reduce((a, b) => a + b, 0);
+  const order = raw.map((v, i) => [v - floors[i], i]).sort((a, b) => b[0] - a[0]);
+  for (let k = 0; k < rest; k++) floors[order[k % order.length][1]]++;
+  return floors;
+}
+
+/**
+ * Die Spiele, die als Nächstes gleichzeitig laufen: bei 2 Fernsehern bis zu zwei.
+ * Gruppenphase: alle offenen Spiele der kleinsten offenen Runde. K.O.: die bereiten, noch offenen Spiele.
+ */
+export function nextMatches(doc) {
+  const tvs = doc.config?.numTVs || 1;
+  if (doc.phase === 'group') {
+    const open = (doc.matches || []).filter((m) => !isPlayed(m));
+    if (!open.length) return [];
+    const round = Math.min(...open.map((m) => m.round));
+    return open.filter((m) => m.round === round).sort((a, b) => a.tv - b.tv);
+  }
+  if (doc.phase === 'knockout') return knockoutOf(doc).filter((m) => m.ready && !m.done).slice(0, tvs);
+  return [];
+}
+
+// ------------------------------------------------------------------ Quoten vor und während des Turniers
+
+/**
+ * Quoten vor dem ersten Spiel: alle gleich, nur der amtierende Meister (eher Titel, weniger wahrscheinlich Letzter)
+ * und der amtierende Verlierer (umgekehrt) weichen leicht ab. Keine Zufallsrechnung, daher immer identisch.
+ */
+export function preTournamentOdds(doc) {
+  const normalize = (w) => {
+    const total = w.reduce((a, b) => a + b, 0);
+    return w.map((x) => x / total);
+  };
+  const champion = normalize(doc.players.map((p) => (p.champion ? 1.5 : p.loserMark ? 0.7 : 1)));
+  const last = normalize(doc.players.map((p) => (p.loserMark ? 1.5 : p.champion ? 0.7 : 1)));
+  return doc.players.map((_, index) => ({ index, champion: champion[index], last: last[index] }));
+}
+
+const countPlayed = (doc) => (doc.matches || []).filter(isPlayed).length + (doc.phase === 'group' ? 0 : knockoutOf(doc).filter((m) => m.done).length);
+
+/**
+ * Quoten: Zu Beginn nur die Grundwerte (siehe oben). Mit jedem gespielten Spiel des laufenden Turniers
+ * zählt die Simulation (aktuelle Form plus Vorjahre) mehr, ab 2 Spielen pro Spieler vollständig.
+ */
+export function computeOdds(doc, history = [], runs = 3000, rng = Math.random) {
+  const n = doc.players.length;
+  if (n < 4) return null;
+  const prior = preTournamentOdds(doc);
+  const played = countPlayed(doc);
+  const trust = Math.min(1, played / (n * 2));
+  if (played === 0) return { confidence: 0, players: prior };
+  const sim = simulateOutcomes(doc, history, runs, rng);
+  if (!sim) return { confidence: trust, players: prior };
+  return {
+    confidence: trust,
+    players: prior.map((p, i) => ({
+      index: i,
+      champion: (1 - trust) * p.champion + trust * sim.players[i].champion,
+      last: (1 - trust) * p.last + trust * sim.players[i].last,
+    })),
+  };
+}
+
+/** Einfacher Hash, damit die Simulation für denselben Spielstand immer dieselben Quoten liefert. */
+export function hashString(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }

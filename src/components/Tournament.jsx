@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTournament } from '../lib/sync.js';
 import { useHistory } from '../lib/history.js';
 import { allGroupPlayed, deriveState, isPlayed, resolveKnockout } from '../lib/tournament.js';
-import { headToHead, nextGroupMatch, playerForm, tipText } from '../lib/stats.js';
+import { headToHead, nextMatches, playerForm, tipText } from '../lib/stats.js';
 import { clearPin, getPin, takeJustCreated } from '../lib/auth.js';
 import { PHASE_LABEL, copyText, nameOf, shareMessage, shareOrCopy, teamOf, tournamentUrl, whatsappUrl } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
@@ -14,9 +14,8 @@ import Finished from './Finished.jsx';
 import TvView from './TvView.jsx';
 
 const TABS = [
-  { id: 'table', icon: '📊', label: 'TABELLE' },
+  { id: 'overview', icon: '🏠', label: 'ÜBERSICHT' },
   { id: 'games', icon: '⚽', label: 'SPIELE' },
-  { id: 'ko', icon: '🏆', label: 'K.O.' },
   { id: 'stats', icon: '📈', label: 'STATISTIK' },
 ];
 
@@ -35,7 +34,10 @@ function MatchButton({ doc, m, onClick, locked = false, tvInfo = false }) {
         <span className={homeWin ? 'win' : ''}>{home.name}</span> <Marks player={doc.players[m.homePlayer]} />
         {home.team && <small>{home.team}</small>}
       </span>
-      <span className={`score ${done ? '' : 'open'}`}>{done ? `${m.homeGoals} : ${m.awayGoals}` : tvInfo && m.tv ? `TV ${m.tv}` : 'VS'}</span>
+      <span className="mid">
+        <span className={`score ${done ? '' : 'open'}`}>{done ? `${m.homeGoals} : ${m.awayGoals}` : 'VS'}</span>
+        {tvInfo && m.tv && <small className="tvtag">TV {m.tv}</small>}
+      </span>
       <span className="side away">
         <span className={awayWin ? 'win' : ''}>{away.name}</span> <Marks player={doc.players[m.awayPlayer]} />
         {away.team && <small>{away.team}</small>}
@@ -75,6 +77,21 @@ function StandingsTable({ doc, standings, showQualified }) {
   );
 }
 
+function TipCard({ doc, history, match, showTv }) {
+  const tip = tipText(doc, history, match);
+  const h2h = headToHead([doc, ...history], tip.home, tip.away);
+  return (
+    <div className="tip">
+      <span className="eyebrow">🤖 COMPUTER-TIPP{showTv && match.tv ? ` · TV ${match.tv}` : ''}</span>
+      <div className="big">{tip.home} {tip.score} {tip.away}</div>
+      <div className="bars" style={{ '--a': `${tip.pHome}fr`, '--d': `${tip.pDraw}fr`, '--b': `${tip.pAway}fr` }}><span /><span /><span /></div>
+      <div className="small">{tip.home} {tip.pHome}% · Remis {tip.pDraw}% · {tip.away} {tip.pAway}%</div>
+      <div className="small">{tip.verdict}{tip.confidence < 0.4 ? ' · noch wenig Daten' : ''}</div>
+      {h2h.games > 0 && <div className="small" style={{ marginTop: 6 }}>Bisher: {tip.home} {h2h.winsA} Siege · {h2h.draws} Remis · {tip.away} {h2h.winsB} Siege</div>}
+    </div>
+  );
+}
+
 function NewPinBanner({ pin, doc, meta, onClose }) {
   const [copied, setCopied] = useState(false);
   const message = `⚽ ${doc.name}\nLive verfolgen: ${tournamentUrl(meta.id)}\nPIN zum Eintragen: ${pin}`;
@@ -98,7 +115,8 @@ export default function Tournament({ id }) {
   const { doc, meta, status, sync, pending, dispatch, retry, refresh } = t;
   const { admin, toast, logoutAdmin } = useApp();
   const history = useHistory(meta?.previousId);
-  const [tab, setTab] = useState('table');
+  const [tab, setTab] = useState('overview');
+  const [gamesView, setGamesView] = useState('group');
   const [filter, setFilter] = useState('all');
   const [pinDialog, setPinDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
@@ -116,7 +134,7 @@ export default function Tournament({ id }) {
     document.title = `${doc.name || 'Turnier'} · Turnier Manager`;
     if (!initialTab.current) {
       initialTab.current = true;
-      if (doc.phase === 'knockout') setTab('ko');
+      setGamesView(doc.phase === 'group' ? 'group' : 'ko');
     }
   }, [doc]);
 
@@ -137,14 +155,13 @@ export default function Tournament({ id }) {
     );
   }
 
-  const nextForTv = doc.phase === 'group' ? nextGroupMatch(doc) : derived.knockout.find((m) => m.ready && !m.done) || null;
+  const upcoming = nextMatches(doc);
   if (tv) {
-    return <TvView doc={doc} derived={derived} nextMatch={nextForTv} onExit={() => { window.history.replaceState({}, '', `/t/${id}`); setTv(false); }} />;
+    return <TvView doc={doc} derived={derived} upcoming={upcoming} onExit={() => { window.history.replaceState({}, '', `/t/${id}`); setTv(false); }} />;
   }
 
   const requireEdit = (fn) => (canEdit ? fn() : setPinDialog({ after: fn }));
   const finished = doc.phase === 'finished';
-  const nextMatch = doc.phase === 'group' ? nextGroupMatch(doc) : derived.knockout.find((m) => m.ready && !m.done) || null;
   const groupDone = (doc.matches || []).filter(isPlayed).length;
 
   const openGroup = (m) => {
@@ -175,9 +192,6 @@ export default function Tournament({ id }) {
 
   const syncLabel = sync.state !== 'saved' ? SYNC_TEXT[sync.state] : pending ? 'Speichert …' : canEdit ? '✓ Gespeichert' : '👀 Nur ansehen';
   const syncClass = sync.state === 'saving' || pending ? 'saving' : sync.state === 'saved' ? '' : 'bad';
-
-  const tip = nextMatch && !finished && nextMatch.homePlayer != null ? tipText(doc, history.docs, nextMatch) : null;
-  const h2h = nextMatch && nextMatch.homePlayer != null ? headToHead([doc, ...history.docs], nameOf(doc, nextMatch.homePlayer), nameOf(doc, nextMatch.awayPlayer)) : null;
 
   const groupMatches = (doc.matches || []).filter((m) => (filter === 'open' ? !isPlayed(m) : filter === 'done' ? isPlayed(m) : true));
   const rounds = Map.groupBy(groupMatches, (m) => m.round);
@@ -212,31 +226,32 @@ export default function Tournament({ id }) {
 
       {justPin && <NewPinBanner pin={justPin} doc={doc} meta={meta} onClose={() => setJustPin(null)} />}
 
-      {tab === 'table' && (
+      {tab === 'overview' && (
         <>
           {finished && <Finished doc={doc} meta={meta} derived={derived} canEdit={canEdit} requireEdit={requireEdit} dispatch={dispatch} refresh={refresh} onError={(m) => toast(m, 'bad')} onReopen={() => setConfirm({ title: 'Turnier wieder öffnen?', text: 'Sieger und Verlierer werden zurückgesetzt, bis das Turnier erneut abgeschlossen wird.', confirmLabel: 'Wieder öffnen', onConfirm: () => dispatch({ type: 'reopen' }) })} />}
 
-          {!finished && nextMatch && nextMatch.homePlayer != null && (
+          {!finished && upcoming.length > 0 && (
             <div className="banner">
-              <span className="eyebrow">{doc.phase === 'group' ? `NÄCHSTES SPIEL · RUNDE ${nextMatch.round} · TV ${nextMatch.tv}` : `NÄCHSTES SPIEL · ${nextMatch.label.toUpperCase()}`}</span>
-              <div className="vs">
-                <b>{nameOf(doc, nextMatch.homePlayer)}</b>
-                <i>VS</i>
-                <b>{nameOf(doc, nextMatch.awayPlayer)}</b>
-              </div>
-              <button className="btn" onClick={() => (doc.phase === 'group' ? openGroup(nextMatch) : openKo(nextMatch))}>Ergebnis eintragen</button>
+              <span className="eyebrow">
+                {upcoming.length > 1 ? 'NÄCHSTE SPIELE' : 'NÄCHSTES SPIEL'} · {doc.phase === 'group' ? `RUNDE ${upcoming[0].round}` : 'K.O.-RUNDE'}
+              </span>
+              {upcoming.map((m) => (
+                <div key={m.id} className="nm">
+                  <p className="small">{doc.phase === 'group' ? `TV ${m.tv}` : m.label.toUpperCase()}</p>
+                  <div className="vs">
+                    <b>{nameOf(doc, m.homePlayer)}</b>
+                    <i>VS</i>
+                    <b>{nameOf(doc, m.awayPlayer)}</b>
+                  </div>
+                  <button className="btn" onClick={() => (doc.phase === 'group' ? openGroup(m) : openKo(m))}>
+                    Ergebnis eintragen{upcoming.length > 1 ? (doc.phase === 'group' ? ` · TV ${m.tv}` : ` · ${m.label}`) : ''}
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
-          {!finished && tip && (
-            <div className="tip">
-              <span className="eyebrow">🤖 COMPUTER-TIPP</span>
-              <div className="big">{tip.home} {tip.score} {tip.away}</div>
-              <div className="bars" style={{ '--a': `${tip.pHome}fr`, '--d': `${tip.pDraw}fr`, '--b': `${tip.pAway}fr` }}><span /><span /><span /></div>
-              <div className="small">{tip.verdict} · Sieg {tip.pHome}% · Remis {tip.pDraw}% · Sieg {tip.pAway}%{tip.confidence < 0.4 ? ' · noch wenig Daten' : ''}</div>
-              {h2h && h2h.games > 0 && <div className="small" style={{ marginTop: 6 }}>Bisher: {nameOf(doc, nextMatch.homePlayer)} {h2h.winsA} Siege · {h2h.draws} Remis · {nameOf(doc, nextMatch.awayPlayer)} {h2h.winsB} Siege</div>}
-            </div>
-          )}
+          {!finished && upcoming.map((m) => <TipCard key={`tip-${m.id}`} doc={doc} history={history.docs} match={m} showTv={upcoming.length > 1} />)}
 
           {doc.phase === 'group' && (
             <p className="small muted" style={{ margin: '4px 0 8px' }}>{groupDone} von {doc.matches.length} Spielen gespielt · die ersten 4 kommen weiter (•)</p>
@@ -254,39 +269,50 @@ export default function Tournament({ id }) {
 
       {tab === 'games' && (
         <>
-          <Segmented label="Filter" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'Alle' }, { value: 'open', label: 'Offen' }, { value: 'done', label: 'Gespielt' }]} />
-          {[...rounds.entries()].map(([round, list]) => (
-            <section key={round}>
-              <div className="round"><span>RUNDE {round}</span><span>{list.length > 1 ? 'TV 1 + TV 2' : `TV ${list[0].tv}`}</span></div>
-              {list.map((m) => <MatchButton key={m.id} doc={doc} m={m} onClick={() => openGroup(m)} tvInfo={doc.config.numTVs > 1} />)}
-            </section>
-          ))}
-          {groupMatches.length === 0 && <p className="empty">Keine Spiele in dieser Ansicht.</p>}
-        </>
-      )}
+          <Segmented label="Ansicht" value={gamesView} onChange={setGamesView} options={[{ value: 'group', label: 'Gruppenphase' }, { value: 'ko', label: 'K.O.-Runde' }]} />
 
-      {tab === 'ko' && (
-        <>
-          {doc.phase === 'group' && <p className="notice">Die K.O.-Runde startet nach der Gruppenphase. So würde sie heute aussehen (Platzierungen können sich noch ändern):</p>}
-          {koGroups.map(([title, list]) => (
-            <section key={title}>
-              <h2 className="section">{title}</h2>
-              {list.map((m) => (
-                <div key={m.id}>
-                  <div className="bracket-label"><span>{m.label.toUpperCase()}</span>{m.stale && <span style={{ color: 'var(--red)' }}>Teilnehmer geändert – neu eintragen</span>}</div>
-                  <MatchButton doc={doc} m={m} onClick={() => openKo(m)} locked={doc.phase === 'group' || !m.ready} />
-                </div>
+          {gamesView === 'group' && (
+            <>
+              <div style={{ marginTop: 12 }}>
+                <Segmented label="Filter" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'Alle' }, { value: 'open', label: 'Offen' }, { value: 'done', label: 'Gespielt' }]} />
+              </div>
+              {[...rounds.entries()].map(([round, list]) => (
+                <section key={round}>
+                  <div className="round"><span>RUNDE {round}</span><span>{list.length > 1 ? 'TV 1 + TV 2' : `TV ${list[0].tv}`}</span></div>
+                  {list.map((m) => <MatchButton key={m.id} doc={doc} m={m} onClick={() => openGroup(m)} tvInfo={doc.config.numTVs > 1} />)}
+                </section>
               ))}
-            </section>
-          ))}
-          {doc.phase === 'knockout' && derived.ranking && (
-            <button className="btn green" style={{ width: 'calc(100% - 4px)', marginTop: 12 }} onClick={() => requireEdit(() => dispatch({ type: 'finish' }))}>Turnier abschliessen</button>
+              {groupMatches.length === 0 && <p className="empty">Keine Spiele in dieser Ansicht.</p>}
+            </>
           )}
-          {doc.phase === 'knockout' && !derived.ranking && <p className="small muted" style={{ marginTop: 12 }}>Sobald alle K.O.-Spiele gespielt sind, kannst du das Turnier abschliessen.</p>}
+
+          {gamesView === 'ko' && (
+            <>
+              {doc.phase === 'group' && <p className="notice" style={{ marginTop: 12 }}>Die K.O.-Runde startet nach der Gruppenphase. So würde sie heute aussehen (Platzierungen können sich noch ändern):</p>}
+              {koGroups.map(([title, list]) => (
+                <section key={title}>
+                  <h2 className="section">{title}</h2>
+                  {list.map((m) => (
+                    <div key={m.id}>
+                      <div className="bracket-label"><span>{m.label.toUpperCase()}</span>{m.stale && <span style={{ color: 'var(--red)' }}>Teilnehmer geändert – neu eintragen</span>}</div>
+                      <MatchButton doc={doc} m={m} onClick={() => openKo(m)} locked={doc.phase === 'group' || !m.ready} />
+                    </div>
+                  ))}
+                </section>
+              ))}
+              {doc.phase === 'group' && allGroupPlayed(doc) && (
+                <button className="btn green" style={{ width: 'calc(100% - 4px)', marginTop: 12 }} onClick={() => requireEdit(() => dispatch({ type: 'startKnockout' }))}>K.O.-Runde starten</button>
+              )}
+              {doc.phase === 'knockout' && derived.ranking && (
+                <button className="btn green" style={{ width: 'calc(100% - 4px)', marginTop: 12 }} onClick={() => requireEdit(() => dispatch({ type: 'finish' }))}>Turnier abschliessen</button>
+              )}
+              {doc.phase === 'knockout' && !derived.ranking && <p className="small muted" style={{ marginTop: 12 }}>Sobald alle K.O.-Spiele gespielt sind, kannst du das Turnier abschliessen.</p>}
+            </>
+          )}
         </>
       )}
 
-      {tab === 'stats' && <StatsTab doc={doc} derived={derived} history={history} nextMatch={nextMatch} />}
+      {tab === 'stats' && <StatsTab doc={doc} derived={derived} history={history} />}
 
       {sheet && (
         <ResultSheet

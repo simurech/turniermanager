@@ -50,7 +50,7 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 /* Kopfzeile */
 .topbar { display: flex; align-items: center; gap: 10px; padding: calc(14px + env(safe-area-inset-top)) 0 10px; }
 .topbar .title { flex: 1; min-width: 0; }
-.topbar .title .logo { font-size: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.topbar .title .logo { font-size: 22px; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .iconbtn { width: 44px; height: 44px; display: grid; place-items: center; background: var(--card); border: 2.5px solid var(--ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--ink); font-size: 20px; flex: none; }
 .iconbtn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 
@@ -231,3 +231,12 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .tv .tbl .who small { font-size: 0.6em; }
 .tv-ko { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
 .tv-ko .card { margin: 0 4px 4px 0; font-size: 20px; }
+
+/* Mehrere parallele Spiele im Banner */
+.banner .nm + .nm { border-top: 2px dashed var(--paper); margin-top: 14px; padding-top: 12px; }
+.banner .nm .small { letter-spacing: 0.1em; opacity: 0.9; }
+.tabbar .inner { grid-template-columns: repeat(3, 1fr); }
+
+/* Fernseher-Hinweis pro Spiel */
+.match .mid { display: grid; justify-items: center; gap: 4px; }
+.tvtag { font-family: var(--label); letter-spacing: 0.1em; font-size: 13px; background: var(--ink); color: var(--paper); padding: 0 8px; border-radius: 3px; }

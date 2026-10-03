@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from '../lib/api.js';
 import { navigate } from '../lib/router.js';
-import { deriveState } from '../lib/tournament.js';
-import { nextGroupMatch } from '../lib/stats.js';
+import { nextMatches } from '../lib/stats.js';
 import { PHASE_LABEL, dateOf, nameOf, photoUrl, yearOf } from '../lib/format.js';
 import { useApp } from '../context.jsx';
 import { Dialog, Section, Skeletons } from './ui.jsx';
@@ -69,29 +68,22 @@ function ActiveCard({ row, admin, onChanged }) {
     };
   }, [row.id]);
 
-  let match = null;
+  const matches = doc ? nextMatches(doc) : [];
   let note = '';
-  if (doc) {
-    if (doc.phase === 'group') {
-      match = nextGroupMatch(doc);
-      note = match ? `Gruppenphase · Runde ${match.round}` : 'Gruppenphase beendet';
-    } else {
-      const next = deriveState(doc).knockout.find((m) => m.ready && !m.done);
-      match = next;
-      note = next ? next.label : 'K.O.-Runde läuft';
-    }
-  }
+  if (doc) note = doc.phase === 'group' ? (matches.length ? `Gruppenphase · Runde ${matches[0].round}` : 'Gruppenphase beendet') : matches.length ? 'K.O.-Runde' : 'K.O.-Runde läuft';
   return (
     <>
       <div className="banner">
         <span className="eyebrow">LÄUFT · {PHASE_LABEL[row.phase].toUpperCase()}</span>
         <p style={{ marginTop: 8, fontFamily: 'var(--display)' }}>{row.name || `Turnier ${row.id}`}</p>
-        {match && doc ? (
-          <div className="vs">
-            <b>{nameOf(doc, match.homePlayer)}</b>
-            <i>VS</i>
-            <b>{nameOf(doc, match.awayPlayer)}</b>
-          </div>
+        {matches.length > 0 && doc ? (
+          matches.map((m) => (
+            <div key={m.id} className="vs">
+              <b>{nameOf(doc, m.homePlayer)}</b>
+              <i>VS</i>
+              <b>{nameOf(doc, m.awayPlayer)}</b>
+            </div>
+          ))
         ) : (
           <p style={{ margin: '12px 0' }}>{doc ? 'Alle Spiele eingetragen' : 'Lädt …'}</p>
         )}

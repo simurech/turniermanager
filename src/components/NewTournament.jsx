@@ -3,17 +3,18 @@ import * as api from '../lib/api.js';
 import { setPin, rememberJustCreated } from '../lib/auth.js';
 import { navigate } from '../lib/router.js';
 import { DEFAULT_CONFIG, createDoc } from '../lib/tournament.js';
-import { yearOf } from '../lib/format.js';
+import { dateOf, yearOf } from '../lib/format.js';
 import { useApp } from '../context.jsx';
 import { Section, Segmented, Switch } from './ui.jsx';
 
 const MAX_ROWS = 10;
+const defaultName = () => `Turnier ${dateOf(new Date().toISOString())}`;
 let keyCounter = 0;
 const blankRow = (over = {}) => ({ key: ++keyCounter, name: '', team: '', selected: true, champion: false, loserMark: false, ...over });
 
 export default function NewTournament() {
   const { admin, toast } = useApp();
-  const [name, setName] = useState(`Turnier ${new Date().getFullYear()}`);
+  const [name, setName] = useState(defaultName);
   const [finished, setFinished] = useState([]);
   const [previousId, setPreviousId] = useState('');
   const [previousPin, setPreviousPin] = useState('');
@@ -71,7 +72,7 @@ export default function NewTournament() {
         ...(r.champion ? { champion: true } : {}),
         ...(r.loserMark ? { loserMark: true } : {}),
       }));
-      const doc = createDoc({ name: name.trim() || `Turnier ${new Date().getFullYear()}`, players, config });
+      const doc = createDoc({ name: name.trim() || defaultName(), players, config });
       const res = await api.createTournament({ data: doc, previousId, previousPin });
       setPin(res.id, res.pin);
       rememberJustCreated(res.id, res.pin);

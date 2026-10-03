@@ -3,7 +3,7 @@ import { PHASE_LABEL, nameOf, teamOf } from '../lib/format.js';
 import { Marks } from './ui.jsx';
 
 /** Grosse Ansicht für Fernseher oder Beamer: nächstes Spiel, Tabelle und K.O.-Stand. Aktualisiert sich über das Polling. */
-export default function TvView({ doc, derived, nextMatch, onExit }) {
+export default function TvView({ doc, derived, upcoming, onExit }) {
   const finished = doc.phase === 'finished';
   const winner = doc.players[doc.winner];
   const loser = doc.players[doc.loser];
@@ -26,14 +26,19 @@ export default function TvView({ doc, derived, nextMatch, onExit }) {
         </div>
       )}
 
-      {!finished && nextMatch && nextMatch.homePlayer != null && (
+      {!finished && upcoming.length > 0 && (
         <div className="banner">
-          <span className="eyebrow">NÄCHSTES SPIEL{doc.phase === 'group' ? ` · RUNDE ${nextMatch.round} · TV ${nextMatch.tv}` : ` · ${nextMatch.label.toUpperCase()}`}</span>
-          <div className="vs">
-            <b>{nameOf(doc, nextMatch.homePlayer)}</b>
-            <i>VS</i>
-            <b>{nameOf(doc, nextMatch.awayPlayer)}</b>
-          </div>
+          <span className="eyebrow">{upcoming.length > 1 ? 'NÄCHSTE SPIELE' : 'NÄCHSTES SPIEL'}{doc.phase === 'group' ? ` · RUNDE ${upcoming[0].round}` : ' · K.O.-RUNDE'}</span>
+          {upcoming.map((m) => (
+            <div key={m.id} className="nm">
+              <p className="small">{doc.phase === 'group' ? `TV ${m.tv}` : m.label.toUpperCase()}</p>
+              <div className="vs">
+                <b>{nameOf(doc, m.homePlayer)}</b>
+                <i>VS</i>
+                <b>{nameOf(doc, m.awayPlayer)}</b>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

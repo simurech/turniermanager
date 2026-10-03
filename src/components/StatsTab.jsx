@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { playerForm, quote, simulateOutcomes, streakLabel } from '../lib/stats.js';
+import { computeOdds, hashString, playerForm, quote, seededRandom, streakLabel } from '../lib/stats.js';
 import { Dots, Marks, Section } from './ui.jsx';
 import HallOfFame from './HallOfFame.jsx';
 
@@ -13,7 +13,7 @@ function Odds({ doc, history }) {
   );
   useEffect(() => {
     if (history.loading) return undefined;
-    const timer = setTimeout(() => setOdds(simulateOutcomes(doc, history.docs, 1500)), 30);
+    const timer = setTimeout(() => setOdds(computeOdds(doc, history.docs, 3000, seededRandom(hashString(signature)))), 30);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, history.loading]);
@@ -41,8 +41,8 @@ function Odds({ doc, history }) {
         </tbody>
       </table>
       <p className="small muted">
-        {odds.confidence < 0.5 ? 'Noch wenig Daten: Die Quoten verändern sich mit jedem Spiel. ' : ''}
-        {history.docs.length ? `Berechnet aus diesem Turnier und ${history.docs.length} früheren. ` : 'Ohne Vorjahre, nur aus diesem Turnier. '}
+        {odds.confidence === 0 ? 'Vor dem ersten Spiel sind alle Quoten gleich, nur der amtierende Meister und Verlierer weichen leicht ab. Mit jedem Spiel zählt die Form mehr. ' : odds.confidence < 0.5 ? 'Noch wenig Daten: Die Quoten verändern sich mit jedem Spiel. ' : ''}
+        {odds.confidence > 0 ? (history.docs.length ? `Berechnet aus diesem Turnier und ${history.docs.length} früheren. ` : 'Berechnet nur aus diesem Turnier. ') : ''}
         Reine Spielerei, ohne Gewähr 😉
       </p>
     </>

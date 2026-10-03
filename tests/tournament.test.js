@@ -51,16 +51,39 @@ describe('Spielplan', () => {
     expect(Map.groupBy(m, (x) => x.round).size).toBe(3);
   });
 
-  it('Heimrecht ist ausgeglichen (höchstens 1 Unterschied pro Spieler bei einfacher Runde)', () => {
-    for (const n of [4, 6, 7]) {
-      const home = new Array(n).fill(0);
-      const away = new Array(n).fill(0);
-      scheduleMatches(n, 1, false).forEach((x) => {
-        home[x.homePlayer]++;
-        away[x.awayPlayer]++;
-      });
-      for (let i = 0; i < n; i++) expect(Math.abs(home[i] - away[i])).toBeLessThanOrEqual(2);
+  it('Heim- und Auswärtsspiele sind gleichmässig verteilt', () => {
+    for (const n of [5, 6, 7, 8]) {
+      for (const tvs of [1, 2]) {
+        for (const dbl of [false, true]) {
+          const balance = new Array(n).fill(0);
+          scheduleMatches(n, tvs, dbl).forEach((x) => {
+            balance[x.homePlayer]++;
+            balance[x.awayPlayer]--;
+          });
+          for (const b of balance) expect(Math.abs(b)).toBeLessThanOrEqual(1);
+        }
+      }
     }
+  });
+
+  it('bei 2 Fernsehern spielt jeder Spieler ungefähr gleich oft auf TV 1 und TV 2', () => {
+    for (const n of [5, 6, 7, 8]) {
+      for (const dbl of [false, true]) {
+        const balance = new Array(n).fill(0);
+        scheduleMatches(n, 2, dbl).forEach((x) => {
+          const d = x.tv === 1 ? 1 : -1;
+          balance[x.homePlayer] += d;
+          balance[x.awayPlayer] += d;
+        });
+        for (const b of balance) expect(Math.abs(b)).toBeLessThanOrEqual(2);
+        if (dbl) for (const b of balance) expect(b).toBe(0);
+      }
+    }
+  });
+
+  it('jedes Zeitfenster belegt beide Fernseher mit verschiedenen Nummern', () => {
+    const rounds = Map.groupBy(scheduleMatches(7, 2, false), (x) => x.round);
+    for (const list of rounds.values()) expect(new Set(list.map((x) => x.tv)).size).toBe(list.length);
   });
 });
 
