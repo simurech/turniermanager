@@ -19,6 +19,30 @@ const LOAD_RETRY_MS = 10000;
 const OPS_TTL_MS = 24 * 60 * 60 * 1000;
 
 const opsKey = (id) => `tm:ops:${id}`;
+const docKey = (id) => `tm:doc:${id}`;
+const DOC_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Zuletzt gesehener Stand des Turniers: wird sofort gezeigt, bis der aktuelle Stand vom Server da ist. */
+function loadStoredDoc(id) {
+  try {
+    const raw = localStorage.getItem(docKey(id));
+    if (!raw) return null;
+    const { ts, doc } = JSON.parse(raw);
+    if (doc && typeof ts === 'number' && Date.now() - ts < DOC_TTL_MS && doc.id === id) return doc;
+    localStorage.removeItem(docKey(id));
+  } catch {
+    /* Speicher nicht verfügbar */
+  }
+  return null;
+}
+
+function storeDoc(id, doc) {
+  try {
+    localStorage.setItem(docKey(id), JSON.stringify({ ts: Date.now(), doc }));
+  } catch {
+    /* Speicher voll oder gesperrt: dann gibt es einfach keinen Schnellstart */
+  }
+}
 
 function loadStoredOps(id) {
   try {
@@ -43,14 +67,15 @@ function storeOps(id, ops) {
 }
 
 export function useTournament(id, { onAuthFail } = {}) {
-  const [server, setServer] = useState(null);
+  const [cached] = useState(() => loadStoredDoc(id));
+  const [server, setServer] = useState(cached);
   const [ops, setOps] = useState(() => loadStoredOps(id));
-  const [status, setStatus] = useState('loading'); // loading | ready | notfound | error
+  const [status, setStatus] = useState(cached ? 'ready' : 'loading'); // loading | ready | notfound | error
   const [sync, setSync] = useState({ state: 'saved', message: '' }); // saved | saving | offline | auth | error
   const [notice, setNotice] = useState('');
   const [connection, setConnection] = useState({ lost: false, since: null });
 
-  const serverRef = useRef(null);
+  const serverRef = useRef(cached);
   const opsRef = useRef(ops);
   const busy = useRef(false);
   const timer = useRef(null);
@@ -61,10 +86,14 @@ export function useTournament(id, { onAuthFail } = {}) {
   const authFailRef = useRef(onAuthFail);
   authFailRef.current = onAuthFail;
 
-  const putServer = useCallback((doc) => {
-    serverRef.current = doc;
-    setServer(doc);
-  }, []);
+  const putServer = useCallback(
+    (doc) => {
+      serverRef.current = doc;
+      setServer(doc);
+      storeDoc(id, doc);
+    },
+    [id],
+  );
 
   const setPending = useCallback(
     (next) => {
@@ -172,11 +201,14 @@ export function useTournament(id, { onAuthFail } = {}) {
         lastOk.current = Date.now();
         setStatus('ready');
       })
-      .catch((e) => setStatus(e.status === 404 || e.status === 400 ? 'notfound' : 'error'));
+      .catch((e) => {
+        if (e.status === 404 || e.status === 400) setStatus('notfound');
+        else if (!serverRef.current) setStatus('error'); // mit gespeichertem Stand bleibt die Ansicht stehen
+      });
   }, [id, putServer]);
 
   useEffect(() => {
-    setStatus('loading');
+    if (!serverRef.current) setStatus('loading');
     loadInitial();
     return () => {
       clearTimeout(timer.current);

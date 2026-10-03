@@ -17,9 +17,18 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+    <style>
+      /* Startanzeige: erscheint sofort, noch bevor das Programm geladen ist */
+      html { background: #cdbf9a; }
+      body { margin: 0; background: #f2e8cf; color: #1d2b53; }
+      .boot { max-width: 520px; margin: 0 auto; padding: calc(28px + env(safe-area-inset-top)) 16px 0; }
+      .boot b { display: block; font: 900 32px/1 Impact, 'Arial Black', sans-serif; text-transform: uppercase; color: #c8372d; text-shadow: 3px 3px 0 #1d2b53; }
+      .boot i { display: block; margin-top: 28px; height: 72px; border: 2.5px solid #1d2b53; border-radius: 6px; background: linear-gradient(90deg, #e9dcba, #fffaf0, #e9dcba) 0 0 / 200% 100%; animation: boot 1.2s infinite; }
+      @keyframes boot { to { background-position: -200% 0; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" aria-busy="true" aria-label="Lädt"><b>Turnier<br />Manager</b><i></i><i></i></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

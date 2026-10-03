@@ -85,7 +85,13 @@ function ArchiveCard({ row, admin, onChanged }) {
 
 export default function Home() {
   const { admin, logoutAdmin } = useApp();
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`tm:list:${admin ? 'admin' : 'guest'}`) || 'null');
+    } catch {
+      return null;
+    }
+  });
   const [error, setError] = useState('');
   const [adminDialog, setAdminDialog] = useState(false);
   const [code, setCode] = useState('');
@@ -97,6 +103,11 @@ export default function Home() {
       .then((r) => {
         setRows(r.tournaments);
         setError('');
+        try {
+          localStorage.setItem(`tm:list:${admin ? 'admin' : 'guest'}`, JSON.stringify(r.tournaments));
+        } catch {
+          /* Speicher nicht verfügbar */
+        }
       })
       .catch((e) => setError(e.message));
   }, []);

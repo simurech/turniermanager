@@ -1,7 +1,7 @@
 // Service Worker: Offline-Hülle für die App. Die API wird nie zwischengespeichert,
 // damit Ergebnisse immer vom Server kommen. Bei jeder Änderung der Hülle die Version erhöhen.
-const CACHE = 'tm-shell-v2';
-const NAVIGATION_TIMEOUT_MS = 4000;
+const CACHE = 'tm-shell-v3';
+const NAVIGATION_TIMEOUT_MS = 1500;
 
 const isHtml = (res) => (res.headers.get('content-type') || '').includes('text/html');
 
