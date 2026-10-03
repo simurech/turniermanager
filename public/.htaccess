@@ -58,3 +58,8 @@ Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains
 # Set proper MIME type for JavaScript modules
 AddType application/javascript .js
 AddType text/css .css
+# Konfiguration und Fallback-Speicher nie ausliefern
+<FilesMatch "^(config|set-admin)\.php$">
+    Require all denied
+</FilesMatch>
+RedirectMatch 403 ^/(data|tm-private)(/|$)
