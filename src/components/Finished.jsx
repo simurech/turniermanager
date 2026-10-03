@@ -39,7 +39,7 @@ export default function Finished({ doc, meta, derived, canEdit, requireEdit, ref
       </div>
 
       <div className="polaroid">
-        <div className="pic">{meta.hasPhoto ? <img src={photoUrl(meta.id, meta.photoVersion)} alt={`Siegerfoto: ${winner?.name} und ${loser?.name}`} /> : '📷 Noch kein Siegerfoto'}</div>
+        <div className={`pic ${meta.hasPhoto ? 'has-photo' : ''}`}>{meta.hasPhoto ? <img src={photoUrl(meta.id, meta.photoVersion)} alt={`Siegerfoto: ${winner?.name} und ${loser?.name}`} /> : '📷 Noch kein Siegerfoto'}</div>
         <span>{winner?.name} &amp; {loser?.name}</span>
       </div>
       <div className="center" style={{ marginTop: 14 }}>
