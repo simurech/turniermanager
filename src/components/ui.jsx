@@ -65,6 +65,7 @@ export function Marks({ player }) {
   return (
     <>
       {player.champion && <span className="tag">👑 Meister</span>}
+      {player.runnerUp && <span className="tag silver">🥈 Zweiter</span>}
       {player.loserMark && <span className="tag red">🍋 Verlierer</span>}
     </>
   );

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as api from '../lib/api.js';
 import { setPin, rememberJustCreated } from '../lib/auth.js';
 import { navigate } from '../lib/router.js';
-import { DEFAULT_CONFIG, createDoc } from '../lib/tournament.js';
+import { DEFAULT_CONFIG, createDoc, deriveState } from '../lib/tournament.js';
 import { dateOf, yearOf } from '../lib/format.js';
 import { useApp } from '../context.jsx';
 import { Section, Segmented, Switch } from './ui.jsx';
@@ -10,7 +10,7 @@ import { Section, Segmented, Switch } from './ui.jsx';
 const MAX_ROWS = 10;
 const defaultName = () => `Turnier ${dateOf(new Date().toISOString())}`;
 let keyCounter = 0;
-const blankRow = (over = {}) => ({ key: ++keyCounter, name: '', team: '', selected: true, champion: false, loserMark: false, ...over });
+const blankRow = (over = {}) => ({ key: ++keyCounter, name: '', team: '', selected: true, champion: false, runnerUp: false, loserMark: false, ...over });
 
 export default function NewTournament() {
   const { admin, toast } = useApp();
@@ -44,7 +44,8 @@ export default function NewTournament() {
       .loadTournament(previousId)
       .then((prev) => {
         if (!alive) return;
-        setRows(prev.players.map((p, i) => blankRow({ name: p.name, champion: i === prev.winner, loserMark: i === prev.loser })));
+        const second = deriveState(prev).ranking?.[1];
+        setRows(prev.players.map((p, i) => blankRow({ name: p.name, champion: i === prev.winner, runnerUp: i === second, loserMark: i === prev.loser })));
         setConfig((c) => ({ ...c, numTVs: prev.config.numTVs ?? c.numTVs, doubleRoundRobin: Boolean(prev.config.doubleRoundRobin), tiebreaker: prev.config.tiebreaker ?? c.tiebreaker, thirdPlacePlayoff: prev.config.thirdPlacePlayoff ?? c.thirdPlacePlayoff }));
       })
       .catch((e) => setError(e.message));
@@ -66,8 +67,15 @@ export default function NewTournament() {
   }, [selected, previousId, previousPin, admin]);
 
   const update = (key, patch) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  // Jeden Marker gibt es nur einmal, und ein Spieler trägt höchstens einen
   const setMark = (key, field) =>
-    setRows((list) => list.map((r) => ({ ...r, [field]: r.key === key ? !r[field] : false })));
+    setRows((list) =>
+      list.map((r) => {
+        if (r.key !== key) return { ...r, [field]: false };
+        const on = !r[field];
+        return { ...r, champion: false, runnerUp: false, loserMark: false, [field]: on };
+      }),
+    );
 
   async function submit(e) {
     e.preventDefault();
@@ -79,6 +87,7 @@ export default function NewTournament() {
         name: r.name.trim(),
         team: r.team.trim(),
         ...(r.champion ? { champion: true } : {}),
+        ...(r.runnerUp ? { runnerUp: true } : {}),
         ...(r.loserMark ? { loserMark: true } : {}),
       }));
       const doc = createDoc({ name: name.trim() || defaultName(), players, config });
@@ -133,7 +142,7 @@ export default function NewTournament() {
         )}
 
         <Section>Spieler ({selected.length})</Section>
-        <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>✓ = spielt mit · 👑 amtierender Meister · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
+        <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>✓ = spielt mit · 👑 amtierender Meister · 🥈 amtierender Zweiter · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
         {rows.map((r, i) => (
           <div key={r.key} className={`player-row ${r.selected ? '' : 'off'}`}>
             <button type="button" className="check" aria-pressed={r.selected} aria-label={`Spieler ${i + 1} dabei`} onClick={() => update(r.key, { selected: !r.selected })}>
@@ -143,6 +152,7 @@ export default function NewTournament() {
               <div className="namerow">
                 <input className="input" placeholder={`Spieler ${i + 1}`} aria-label={`Name Spieler ${i + 1}`} value={r.name} maxLength={30} onChange={(e) => update(r.key, { name: e.target.value })} />
                 <button type="button" className="mark" aria-pressed={r.champion} aria-label={`Spieler ${i + 1} ist amtierender Meister`} title="Amtierender Meister" onClick={() => setMark(r.key, 'champion')}>👑</button>
+                <button type="button" className="mark" aria-pressed={r.runnerUp} aria-label={`Spieler ${i + 1} ist amtierender Zweiter`} title="Amtierender Zweiter" onClick={() => setMark(r.key, 'runnerUp')}>🥈</button>
                 <button type="button" className="mark lose" aria-pressed={r.loserMark} aria-label={`Spieler ${i + 1} ist amtierender Verlierer`} title="Amtierender Verlierer" onClick={() => setMark(r.key, 'loserMark')}>🍋</button>
               </div>
               <input className="input" placeholder="Team (optional)" aria-label={`Team Spieler ${i + 1}`} value={r.team} maxLength={30} onChange={(e) => update(r.key, { team: e.target.value })} />

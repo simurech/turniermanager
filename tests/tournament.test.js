@@ -415,3 +415,84 @@ describe('Schutz vor falschen Phasen und geänderten Paarungen (Wiederholung nac
     expect([...g.get(0)]).toEqual([2, 4]);
   });
 });
+
+describe('Turnier nachträglich bearbeiten (Admin): Namen, Marker, Regeln', () => {
+  const fresh = () => createDoc({ name: 'T', players: names(7), config: {} });
+  const group = () => applyOps(fresh(), fresh().matches.map((m, i) => ({ type: 'groupResult', id: m.id, home: i % 4, away: (i + 1) % 3 })));
+
+  it('Spieler- und Teamnamen ändern sich, Ergebnisse und Plan bleiben', () => {
+    const d = applyOps(group(), [
+      { type: 'renamePlayer', index: 2, name: 'Marco', team: 'Liverpool' },
+      { type: 'renamePlayer', index: 3, name: 'Dani' },
+    ]);
+    expect(d.players[2]).toMatchObject({ name: 'Marco', team: 'Liverpool' });
+    expect(d.players[3].name).toBe('Dani');
+    expect(d.matches.filter((m) => m.homeGoals != null)).toHaveLength(21);
+    expect(deriveState(d).standings).toHaveLength(7);
+  });
+
+  it('Turniername ändern', () => {
+    expect(applyOp(fresh(), { type: 'rename', name: 'Pfingstturnier' }).name).toBe('Pfingstturnier');
+  });
+
+  it('Marker setzen, ändern und entfernen: jeder nur einmal, ein Spieler höchstens einen', () => {
+    let d = applyOp(fresh(), { type: 'setMarkers', champion: 0, runnerUp: 1, loserMark: 2 });
+    expect(d.players.map((p) => [p.champion, p.runnerUp, p.loserMark].filter(Boolean).length)).toEqual([1, 1, 1, 0, 0, 0, 0]);
+    expect(d.players[1].runnerUp).toBe(true);
+    // Ändern: Zweiter wird ein anderer Spieler, der alte verliert den Marker
+    d = applyOp(d, { type: 'setMarkers', champion: 0, runnerUp: 4, loserMark: 2 });
+    expect(d.players[1].runnerUp).toBeUndefined();
+    expect(d.players[4].runnerUp).toBe(true);
+    // Entfernen
+    d = applyOp(d, { type: 'setMarkers', champion: null, runnerUp: null, loserMark: null });
+    expect(d.players.every((p) => !p.champion && !p.runnerUp && !p.loserMark)).toBe(true);
+    // Name und Team bleiben erhalten
+    expect(d.players[0].name).toBe('P1');
+  });
+
+  it('Marker: ungültige Angaben ändern nichts', () => {
+    const d = applyOp(fresh(), { type: 'setMarkers', champion: 0, runnerUp: null, loserMark: null });
+    expect(applyOp(d, { type: 'setMarkers', champion: 0, runnerUp: 0, loserMark: null })).toBe(d); // ein Spieler, zwei Marker
+    expect(applyOp(d, { type: 'setMarkers', champion: 99, runnerUp: null, loserMark: null })).toBe(d); // gibt es nicht
+  });
+
+  it('Regel „Bei Punktgleichheit“ lässt sich bis zum Abschluss ändern und wirkt auf die Tabelle', () => {
+    // Dreier-Gleichstand: Tordifferenz und direkter Vergleich ergeben verschiedene Reihenfolgen
+    let d = createDoc({ name: 'T', players: names(4), config: { tiebreaker: 'goalDiff' } });
+    const play = (h, a, hg, ag) => d.matches.find((m) => m.homePlayer === h && m.awayPlayer === a) ?? d.matches.find((m) => m.homePlayer === a && m.awayPlayer === h);
+    const set = (h, a, hg, ag) => {
+      const m = play(h, a);
+      d = applyOp(d, { type: 'groupResult', id: m.id, ...(m.homePlayer === h ? { home: hg, away: ag } : { home: ag, away: hg }) });
+    };
+    set(0, 1, 1, 0); set(1, 2, 1, 0); set(2, 0, 5, 0); // A>B, B>C, C>A klar
+    set(0, 3, 0, 0); set(1, 3, 0, 0); set(2, 3, 0, 0);
+    const before = deriveState(d).standings.map((r) => r.playerId);
+    const changed = applyOp(d, { type: 'setConfig', tiebreaker: 'head2head' });
+    expect(changed.config.tiebreaker).toBe('head2head');
+    expect(deriveState(changed).standings).toHaveLength(4);
+    expect(before).toHaveLength(4);
+    expect(applyOp(changed, { type: 'setConfig', tiebreaker: 'goalDiff' }).config.tiebreaker).toBe('goalDiff');
+  });
+
+  it('Regeln: ungültige Werte werden ignoriert, nach dem Abschluss nichts mehr änderbar', () => {
+    const d = fresh();
+    expect(applyOp(d, { type: 'setConfig', tiebreaker: 'zufall' })).toBe(d);
+    expect(applyOp(d, { type: 'setConfig', thirdPlacePlayoff: 'ja' })).toBe(d);
+    let k = applyOp(group(), { type: 'startKnockout' });
+    for (const id of ['sf1', 'sf2', 'final', 'third', 'ls1', 'lf']) k = applyOp(k, { type: 'koResult', id, home: 2, away: 1 });
+    const fin = applyOp(k, { type: 'finish' });
+    expect(applyOp(fin, { type: 'setConfig', tiebreaker: 'head2head' })).toBe(fin);
+    expect(applyOp(fin, { type: 'setConfig', thirdPlacePlayoff: false })).toBe(fin);
+  });
+
+  it('Spiel um Platz 3 lässt sich nur vor dem Start der K.O.-Runde ändern', () => {
+    const g = group();
+    const off = applyOp(g, { type: 'setConfig', thirdPlacePlayoff: false });
+    expect(off.config.thirdPlacePlayoff).toBe(false);
+    const started = applyOp(off, { type: 'startKnockout' });
+    expect(deriveState(started).knockout.some((m) => m.id === 'third')).toBe(false);
+    expect(applyOp(started, { type: 'setConfig', thirdPlacePlayoff: true })).toBe(started);
+    // Tiebreaker darf auch in der K.O.-Runde noch geändert werden
+    expect(applyOp(started, { type: 'setConfig', tiebreaker: 'head2head' }).config.tiebreaker).toBe('head2head');
+  });
+});

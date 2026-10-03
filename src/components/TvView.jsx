@@ -49,7 +49,7 @@ export default function TvView({ doc, derived, upcoming, onExit }) {
         {derived.standings.map((r) => {
           const p = doc.players[r.playerId];
           return (
-            <div key={r.playerId} role="row" className={`tr ${p.champion ? 'champ' : ''} ${p.loserMark ? 'lastrow' : ''}`}>
+            <div key={r.playerId} role="row" className={`tr ${p.champion ? 'champ' : ''} ${p.runnerUp ? 'second' : ''} ${p.loserMark ? 'lastrow' : ''}`}>
               <span className="rank">{r.rank}</span>
               <span className="who">{p.name} <Marks player={p} />{teamOf(doc, r.playerId) && <small>{teamOf(doc, r.playerId)}</small>}</span>
               <span>{r.played}</span>

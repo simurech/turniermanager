@@ -307,8 +307,17 @@ export function roundPercents(values) {
 export function nextMatches(doc) {
   const tvs = doc.config?.numTVs || 1;
   if (doc.phase === 'group') {
-    // Die ersten offenen Spiele der Spielreihenfolge: wird eines fertig, rückt sofort das nächste nach
-    return (doc.matches || []).filter((m) => !isPlayed(m)).sort((a, b) => a.id - b.id).slice(0, tvs).sort((a, b) => a.tv - b.tv);
+    // Die ersten offenen Spiele der Spielreihenfolge: wird eines fertig, rückt sofort das nächste nach.
+    // Wurde ein Ergebnis vergessen und später nachgetragen, wird ein Spiel mit einem bereits belegten Spieler übersprungen.
+    const picked = [];
+    for (const m of (doc.matches || []).filter((x) => !isPlayed(x)).sort((a, b) => a.id - b.id)) {
+      if (picked.length >= tvs) break;
+      const busy = picked.some((p) => [p.homePlayer, p.awayPlayer].some((id) => id === m.homePlayer || id === m.awayPlayer));
+      if (!busy) picked.push({ ...m });
+    }
+    // Zwei gleichzeitige Spiele laufen auf verschiedenen Fernsehern
+    if (picked.length === 2 && picked[0].tv === picked[1].tv) picked[1].tv = picked[0].tv === 1 ? 2 : 1;
+    return picked.sort((a, b) => a.tv - b.tv);
   }
   if (doc.phase === 'knockout') {
     const open = knockoutOf(doc).filter((m) => !m.done);

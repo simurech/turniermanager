@@ -10,6 +10,7 @@ import { useApp } from '../context.jsx';
 import { Dots, Marks, Section, Segmented, Skeletons } from './ui.jsx';
 import { ConfirmDialog, PinDialog, PinInfoDialog, ResultSheet } from './Dialogs.jsx';
 import StatsTab from './StatsTab.jsx';
+import EditTournament from './EditTournament.jsx';
 import Finished from './Finished.jsx';
 import TvView from './TvView.jsx';
 
@@ -60,7 +61,7 @@ function StandingsTable({ doc, standings, showQualified }) {
         const p = doc.players[r.playerId];
         const form = playerForm(doc, r.playerId, 3);
         return (
-          <div key={r.playerId} role="row" className={`tr ${p.champion ? 'champ' : ''} ${p.loserMark ? 'lastrow' : ''} ${showQualified && i < 4 ? 'qual' : ''}`}>
+          <div key={r.playerId} role="row" className={`tr ${p.champion ? 'champ' : ''} ${p.runnerUp ? 'second' : ''} ${p.loserMark ? 'lastrow' : ''} ${showQualified && i < 4 ? 'qual' : ''}`}>
             <span className="rank">{r.rank}</span>
             <span className="who">
               {p.name} <Marks player={p} />
@@ -123,6 +124,7 @@ export default function Tournament({ id }) {
   const [sheet, setSheet] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [pinInfoOpen, setPinInfoOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [justPin, setJustPin] = useState(() => takeJustCreated(id));
   const [tv, setTv] = useState(() => new URLSearchParams(window.location.search).has('tv'));
   const [, forceRender] = useState(0);
@@ -239,6 +241,7 @@ export default function Tournament({ id }) {
           <span className={`sync ${syncClass}`} role="status">{syncLabel}</span>
         )}
         {admin && <button className="link" onClick={() => setPinInfoOpen(true)}>🔑 PIN anzeigen</button>}
+        {admin && <button className="link" onClick={() => setEditOpen(true)}>✏️ Bearbeiten</button>}
         {canEdit ? (
           <button className="link" onClick={() => { clearPin(id); if (admin) logoutAdmin(); forceRender((n) => n + 1); }}>🔒 Sperren{admin ? ' (Admin)' : ''}</button>
         ) : (
@@ -362,6 +365,7 @@ export default function Tournament({ id }) {
         />
       )}
       {confirm && <ConfirmDialog {...confirm} onClose={() => setConfirm(null)} />}
+      {editOpen && <EditTournament doc={doc} onClose={() => setEditOpen(false)} onSave={(ops) => { ops.forEach(dispatch); setEditOpen(false); }} />}
       {pinInfoOpen && <PinInfoDialog id={id} name={doc.name || id} onClose={() => setPinInfoOpen(false)} />}
 
       <nav className="tabbar" aria-label="Bereiche">

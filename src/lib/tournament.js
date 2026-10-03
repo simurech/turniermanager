@@ -590,6 +590,37 @@ export function applyOp(doc, op) {
     }
     case 'rename':
       return typeof op.name === 'string' ? { ...doc, name: op.name.slice(0, 60) } : doc;
+    case 'setMarkers': {
+      // Amtierender Meister, Zweiter und Verlierer festlegen. Ein Spieler trägt höchstens einen Marker.
+      const fields = ['champion', 'runnerUp', 'loserMark'];
+      const picks = fields.map((f) => (Number.isInteger(op[f]) ? op[f] : null));
+      if (picks.some((i) => i !== null && !doc.players[i])) return doc;
+      const chosen = picks.filter((i) => i !== null);
+      if (new Set(chosen).size !== chosen.length) return doc;
+      const players = doc.players.map((p, i) => {
+        const { champion, runnerUp, loserMark, ...rest } = p;
+        const marks = {};
+        fields.forEach((f, k) => {
+          if (picks[k] === i) marks[f] = true;
+        });
+        return { ...rest, ...marks };
+      });
+      return { ...doc, players };
+    }
+    case 'setConfig': {
+      // Regeln nachträglich ändern: Gleichstand bis zum Abschluss, Spiel um Platz 3 nur vor dem Start der K.O.-Runde
+      const next = { ...doc.config };
+      let changed = false;
+      if (doc.phase !== 'finished' && (op.tiebreaker === 'goalDiff' || op.tiebreaker === 'head2head') && op.tiebreaker !== next.tiebreaker) {
+        next.tiebreaker = op.tiebreaker;
+        changed = true;
+      }
+      if (doc.phase === 'group' && typeof op.thirdPlacePlayoff === 'boolean' && op.thirdPlacePlayoff !== next.thirdPlacePlayoff) {
+        next.thirdPlacePlayoff = op.thirdPlacePlayoff;
+        changed = true;
+      }
+      return changed ? { ...doc, config: next } : doc;
+    }
     default:
       return doc;
   }

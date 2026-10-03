@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from '../lib/api.js';
 import { navigate } from '../lib/router.js';
-import { nextMatches } from '../lib/stats.js';
-import { PHASE_LABEL, dateOf, nameOf, photoUrl, yearOf } from '../lib/format.js';
+import { PHASE_LABEL, dateOf, photoUrl, yearOf } from '../lib/format.js';
 import { useApp } from '../context.jsx';
 import { Dialog, Section, Skeletons } from './ui.jsx';
 import { ConfirmDialog, PinDialog, PinInfoDialog } from './Dialogs.jsx';
@@ -50,47 +49,12 @@ function AdminTools({ row, onChanged }) {
 }
 
 function ActiveCard({ row, admin, onChanged }) {
-  const [doc, setDoc] = useState(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api
-        .loadTournament(row.id)
-        .then((d) => {
-          if (!alive) return;
-          setDoc(d);
-          setFailed(false);
-        })
-        .catch(() => alive && setFailed(true));
-    load();
-    const t = setInterval(() => !document.hidden && load(), 10000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [row.id]);
-
-  const matches = doc ? nextMatches(doc) : [];
-  let note = '';
-  if (doc) note = doc.phase === 'group' ? (matches.length ? `Gruppenphase · Runde ${matches[0].round}` : 'Gruppenphase beendet') : matches.length ? 'K.O.-Runde' : 'K.O.-Runde läuft';
   return (
     <>
       <div className="banner">
         <span className="eyebrow">LÄUFT · {PHASE_LABEL[row.phase].toUpperCase()}</span>
-        <p style={{ marginTop: 8, fontFamily: 'var(--display)' }}>{row.name || `Turnier ${row.id}`}</p>
-        {matches.length > 0 && doc ? (
-          matches.map((m) => (
-            <div key={m.id} className="vs">
-              <b>{nameOf(doc, m.homePlayer)}</b>
-              <i>VS</i>
-              <b>{nameOf(doc, m.awayPlayer)}</b>
-            </div>
-          ))
-        ) : (
-          <p style={{ margin: '12px 0' }}>{doc ? 'Alle Spiele eingetragen' : failed ? 'Stand gerade nicht verfügbar' : 'Lädt …'}</p>
-        )}
-        {note && <p className="small" style={{ marginBottom: 10 }}>{note} · {row.playerCount} Spieler</p>}
+        <p style={{ margin: '10px 0 14px', fontFamily: 'var(--display)', fontSize: 20 }}>{row.name || `Turnier ${row.id}`}</p>
+        <p className="small" style={{ marginBottom: 12 }}>{row.playerCount} Spieler</p>
         <button className="btn" onClick={() => navigate(`/t/${row.id}`)}>Turnier öffnen</button>
       </div>
       {admin && <AdminTools row={row} onChanged={onChanged} />}

@@ -20,7 +20,7 @@ Admin-Code für die Entwicklung setzen: `php tools/set-admin.php /tmp/tm`
 ## Tests
 
 ```bash
-npm test            # 107 Unit-Tests (Logik, Statistik, Teilen, PIN-Speicher) und 24 API-Tests
+npm test            # 116 Unit-Tests (Logik, Statistik, Teilen, PIN-Speicher) und 24 API-Tests
 npm run test:unit   # nur die Unit-Tests
 ```
 
@@ -46,6 +46,10 @@ npm run test:unit   # nur die Unit-Tests
 - **Turnier-Verlierer** ist, wer das Verlierer-Final verliert (letzter Platz der Endrangliste).
 - **Änderungen nach dem K.O.-Start:** K.O.-Ergebnisse gelten nur, solange dieselben zwei Spieler antreten. Sonst werden sie als veraltet markiert und müssen neu eingetragen werden.
 - **Quoten:** Das Restturnier wird 1500-mal mit Poisson-verteilten Toren simuliert. Quote = 0.92 / Wahrscheinlichkeit. Vorjahre zählen schwächer als das laufende Turnier.
+
+## Turnier nachträglich bearbeiten (Admin)
+
+Der Admin sieht auf der Turnierseite „✏️ Bearbeiten“. Dort lassen sich Turnier-, Spieler- und Teamnamen ändern, die Marker (👑 amtierender Meister, 🥈 Zweiter, 🍋 Verlierer) setzen und die Regeln anpassen: „Bei Punktgleichheit“ bis zum Abschluss, „Spiel um Platz 3“ nur vor dem Start der K.O.-Runde. Spieleranzahl, Fernseher und Hin-/Rückrunde stehen mit dem Spielplan fest. Die Änderungen laufen als Operationen (`rename`, `renamePlayer`, `setMarkers`, `setConfig`) durch dieselbe Speicherung wie Ergebnisse.
 
 ## Sicherheit
 

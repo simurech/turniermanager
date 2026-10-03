@@ -325,8 +325,9 @@ describe('Nahtloser Wechsel bei 2 Fernsehern', () => {
     for (let i = 0; i < 21; i++) {
       const next = nextMatches(doc);
       seen.push(next.length);
-      // Immer das erste der beiden Spiele wird fertig (andere Reihenfolgen sind ebenso erlaubt)
-      doc = applyOp(doc, { type: 'groupResult', id: next[0].id, home: i % 3, away: 0 });
+      // Mal endet das erste, mal das zweite Spiel zuerst, wie im echten Betrieb
+      const finished = next[i % 2 === 0 ? 0 : next.length - 1];
+      doc = applyOp(doc, { type: 'groupResult', id: finished.id, home: i % 3, away: 0 });
     }
     expect(seen.slice(0, 19).every((n) => n === 2)).toBe(true);
     expect(seen.slice(19)).toEqual([2, 1]);
@@ -442,5 +443,31 @@ describe('Ewige Tabelle: zweite Plätze (Silbermedaille)', () => {
   it('nicht abgeschlossene Turniere zählen keinen zweiten Platz', () => {
     const table = hallOfFame([playGroup(fresh(), marcoWins)]);
     expect(table.reduce((s, e) => s + e.seconds, 0)).toBe(0);
+  });
+});
+
+describe('Robuste Anzeige bei nachgetragenen Ergebnissen', () => {
+  it('zwei gleichzeitige Spiele haben nie denselben Spieler und nie denselben Fernseher', () => {
+    let doc = createDoc({ name: 'T', players: players(7), config: { numTVs: 2 } });
+    // Zufällige, nicht der Reihe nach eingetragene Ergebnisse
+    const rng = seededRandom(42);
+    for (let round = 0; round < 40; round++) {
+      const open = doc.matches.filter((m) => m.homeGoals == null);
+      if (open.length < 2) break;
+      const pick = open[Math.floor(rng() * open.length)];
+      doc = applyOp(doc, { type: 'groupResult', id: pick.id, home: 1, away: 0 });
+      const next = nextMatches(doc);
+      expect(next.length).toBeLessThanOrEqual(2);
+      if (next.length === 2) {
+        const ids = [next[0].homePlayer, next[0].awayPlayer, next[1].homePlayer, next[1].awayPlayer];
+        expect(new Set(ids).size).toBe(4);
+        expect(next[0].tv).not.toBe(next[1].tv);
+      }
+    }
+  });
+
+  it('im Normalfall bleibt die Reihenfolge unverändert', () => {
+    const doc = createDoc({ name: 'T', players: players(7), config: { numTVs: 2 } });
+    expect(nextMatches(doc).map((m) => m.id).sort()).toEqual([0, 1]);
   });
 });
