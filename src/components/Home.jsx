@@ -207,7 +207,7 @@ export default function Home() {
 
       <Section>Turnier per Code öffnen</Section>
       <form onSubmit={openByCode} className="field" style={{ display: 'flex', gap: 8 }}>
-        <input className="input" value={code} onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))} placeholder="z. B. K7M2QX" aria-label="Turnier-Code" autoCapitalize="characters" autoComplete="off" />
+        <input className="input" name="code" id="code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))} placeholder="z. B. K7M2QX" aria-label="Turnier-Code" autoCapitalize="characters" autoComplete="off" />
         <button className="btn small" style={{ minWidth: 90 }} disabled={code.length !== 6}>Öffnen</button>
       </form>
 

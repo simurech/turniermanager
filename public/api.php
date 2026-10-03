@@ -16,9 +16,10 @@ const MAX_BODY_BYTES = 262144;
 const MAX_PHOTO_BYTES = 1500000;
 const PIN_MAX_FAILS = 5;
 const PIN_WINDOW = 600;
+const PIN_MAX_FAILS_DAY = 20; // zusätzlich pro Tag: macht Durchprobieren von 10'000 PINs unpraktikabel
 const CREATE_PER_IP_PER_DAY = 5;
 const CREATE_GLOBAL_PER_DAY = 50;
-const EMPTY_TOURNAMENT_DAYS = 3;
+const EMPTY_TOURNAMENT_DAYS = 7;
 const PHASES = ['setup', 'group', 'knockout', 'finished'];
 const DATA_KEYS = ['name', 'config', 'players', 'matches', 'standings', 'knockoutMatches', 'phase', 'winner', 'loser'];
 
@@ -229,11 +230,13 @@ function authenticate(?array $t): ?string
     }
     if ($pin !== '' && $t !== null) {
         rate_block_if_exceeded($pinKey, PIN_MAX_FAILS, PIN_WINDOW, 'Zu viele Fehlversuche. Bitte kurz warten.');
+        rate_block_if_exceeded($pinKey . ':day', PIN_MAX_FAILS_DAY, 86400, 'Zu viele Fehlversuche für dieses Turnier. Bitte morgen erneut versuchen oder den Admin fragen.');
         if (preg_match('/\A\d{4}\z/', $pin) === 1 && password_verify($pin, $t['pinHash'])) {
             rate_clear($pinKey);
             return 'pin';
         }
         rate_add($pinKey, PIN_WINDOW);
+        rate_add($pinKey . ':day', 86400);
     }
     if ($admin !== '' || $pin !== '') {
         fail(403, 'Falscher PIN oder Admin-Code');

@@ -29,14 +29,14 @@ RewriteRule . /index.html [L]
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
     Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
 
-    # Die App-Seite und der Service Worker müssen immer frisch geprüft werden,
-    # Dateien mit Hash im Namen dürfen ein Jahr lang gespeichert bleiben.
-    <FilesMatch "(index\.html|sw\.js|site\.webmanifest)$">
+    # Dateien mit Hash im Namen (JS, CSS, Schriften) dürfen ein Jahr lang gespeichert bleiben.
+    <FilesMatch "\.(js|css|woff2?)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    # Die App-Seite und der Service Worker müssen immer frisch geprüft werden (steht nach der Regel oben, damit sie gewinnt).
+    <FilesMatch "^(index\.html|sw\.js|site\.webmanifest)$">
         Header set Cache-Control "no-cache"
     </FilesMatch>
-    <If "%{REQUEST_URI} =~ m#^/assets/#">
-        Header set Cache-Control "public, max-age=31536000, immutable"
-    </If>
 </IfModule>
 
 # Komprimierung
