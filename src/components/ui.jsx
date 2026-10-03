@@ -1,20 +1,44 @@
 import { useEffect, useRef } from 'react';
 
-/** Modaler Dialog oder Bottom-Sheet. Schliesst per Escape oder Tipp auf den Hintergrund. */
+/**
+ * Modaler Dialog oder Bottom-Sheet. Schliesst per Escape oder Tipp auf den Hintergrund, hält den Fokus
+ * im Fenster und sperrt das Scrollen der Seite dahinter. `onClose` darf bei jedem Rendern neu sein.
+ */
 export function Dialog({ title, onClose, children, sheet = false, label }) {
   const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    const focusable = () => [...(ref.current?.querySelectorAll('input, button, select, a[href]') || [])].filter((el) => !el.disabled);
+    const onKey = (e) => {
+      if (e.key === 'Escape') closeRef.current?.();
+      if (e.key === 'Tab') {
+        const items = focusable();
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
     document.addEventListener('keydown', onKey);
     const previous = document.activeElement;
-    ref.current?.querySelector('input, button, select')?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    focusable()[0]?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
       previous?.focus?.();
     };
-  }, [onClose]);
+  }, []);
   return (
-    <div className={`backdrop ${sheet ? '' : 'mid'}`} onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div className={`backdrop ${sheet ? '' : 'mid'}`} onPointerDown={(e) => e.target === e.currentTarget && closeRef.current?.()}>
       <div ref={ref} className={sheet ? 'sheet' : 'dialog'} role="dialog" aria-modal="true" aria-label={label || title}>
         {title && <h3>{title}</h3>}
         {children}

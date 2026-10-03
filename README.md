@@ -20,7 +20,7 @@ Admin-Code für die Entwicklung setzen: `php tools/set-admin.php /tmp/tm`
 ## Tests
 
 ```bash
-npm test            # 65 Unit-Tests (Logik, Statistik, PIN-Speicher) und 13 API-Tests
+npm test            # 99 Unit-Tests (Logik, Statistik, Teilen, PIN-Speicher) und 22 API-Tests
 npm run test:unit   # nur die Unit-Tests
 ```
 
@@ -49,8 +49,10 @@ npm run test:unit   # nur die Unit-Tests
 
 ## Sicherheit
 
-- PIN und Admin-Code werden nur als bcrypt-Hash gespeichert. Nach 5 Fehlversuchen in 10 Minuten wird gesperrt.
-- Erstellen ist pro IP (5) und insgesamt (50) pro Tag begrenzt. Der Admin ist ausgenommen.
+- Der Admin-Code wird nur als bcrypt-Hash gespeichert. Der Turnier-PIN steht lesbar im privaten Speicher, damit der Admin ihn jederzeit abrufen kann (`get_pin`). Er wird nie an Besucher ausgeliefert.
+- Fehlversuche werden pro Besucher-Adresse und pro Turnier gezählt (10 in 10 Minuten, 30 pro Tag, 100 pro Tag insgesamt). Die Zählung ist atomar, gleichzeitige Anfragen umgehen sie nicht. Ein neuer PIN hebt die Sperre auf.
+- Erstellen ist pro Adresse (5) und insgesamt (50) pro Tag begrenzt. Der Admin ist ausgenommen. Gezählt wird die echte Adresse (`REMOTE_ADDR`), `X-Forwarded-For` wird ignoriert.
+- Leere Turniere (nie ein Ergebnis eingetragen) werden nach 60 Tagen aufgeräumt.
 - Der Speicher liegt ausserhalb des Webroots (`../tm-private`). Ist das nicht möglich, liegt er in `public/data` mit Zugriffssperre.
 - Fotos werden serverseitig neu als JPEG kodiert (max. 1200 px). Dabei fallen EXIF-Daten wie der Standort weg.
 
@@ -60,5 +62,7 @@ npm run test:unit   # nur die Unit-Tests
 2. Den Inhalt von `dist/` nach `~/domains/turniermanager.urech.dev/public_html/` kopieren. **Den Ordner `data/` und `photos/*.jpg` nie überschreiben oder löschen.**
 3. Einmalig den Admin-Code setzen: `php tools/set-admin.php ~/domains/turniermanager.urech.dev/tm-private` (Datei `tools/set-admin.php` vorher hochladen und danach löschen).
 4. Prüfen: Startseite öffnen, Turnier anlegen, PIN testen, Foto hochladen.
+
+Beim Service Worker (`public/sw.js`) bei jeder Änderung die Version `CACHE` erhöhen.
 
 Vor jedem Deployment ein Backup der alten Dateien auf dem Server anlegen (`cp -r public_html public_html_backup_DATUM`).

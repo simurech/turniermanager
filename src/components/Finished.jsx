@@ -69,7 +69,7 @@ export default function Finished({ doc, meta, derived, canEdit, requireEdit, ref
 
       <div className="btn-row" style={{ margin: '16px 4px 6px 0' }}>
         <a className="btn" href={whatsappUrl(message)} target="_blank" rel="noreferrer">Auf WhatsApp teilen</a>
-        <button className="btn alt" onClick={() => shareOrCopy({ title: doc.name, text: message, url: tournamentUrl(meta.id) })}>Teilen …</button>
+        <button className="btn alt" onClick={() => shareOrCopy({ title: doc.name, text: message })}>Teilen …</button>
       </div>
       {canEdit && <button className="link" onClick={onReopen}>Turnier wieder öffnen</button>}
     </>

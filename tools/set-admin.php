@@ -23,6 +23,9 @@ if (mb_strlen($code) < 12) {
 }
 $file = rtrim($dir, '/') . '/config.php';
 $php = "<?php\nreturn " . var_export(['admin_hash' => password_hash($code, PASSWORD_BCRYPT)], true) . ";\n";
-file_put_contents($file, $php);
-chmod($file, 0600);
+umask(0077);
+$tmp = $file . '.tmp';
+file_put_contents($tmp, $php);
+chmod($tmp, 0600);
+rename($tmp, $file);
 fwrite(STDOUT, "Admin-Code gespeichert in $file\n");

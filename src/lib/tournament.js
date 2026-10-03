@@ -11,6 +11,17 @@ export const DEFAULT_CONFIG = {
 
 export const isPlayed = (m) => m && m.homeGoals != null && m.awayGoals != null;
 
+/** Gruppiert nach Schlüssel (wie Map.groupBy, das ältere Browser nicht kennen). */
+export function groupBy(list, keyFn) {
+  const groups = new Map();
+  for (const item of list) {
+    const key = keyFn(item);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return groups;
+}
+
 // ------------------------------------------------------------------ Spielplan
 
 /** Alle Paarungen einer Hin-/Rückrunde nach der Kreismethode, mit ausgeglichenem Heimrecht. */
@@ -72,7 +83,7 @@ function balanceHomeAway(pairs, n) {
  * bleiben. Bei bis zu 16 Runden wird alles durchprobiert, sonst gibt es viele Suchläufe mit festem Startwert.
  */
 function balanceTvs(matches, n) {
-  const rounds = [...Map.groupBy(matches, (m) => m.round).values()];
+  const rounds = [...groupBy(matches, (m) => m.round).values()];
   const base = new Map(matches.map((m) => [m, m.tv]));
   const costOf = (flips) => {
     const balance = new Array(n).fill(0); // Spiele auf TV 1 minus Spiele auf TV 2
@@ -187,19 +198,109 @@ function tvImbalance(matches, n) {
   return imbalance(balance);
 }
 
+const sharesPlayer = (a, b) => a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1];
+
 /**
- * Erstellt den Spielplan. Bei 2 Fernsehern werden verschiedene Startreihenfolgen der Spieler probiert
- * und die gewählt, bei der jeder Spieler am gleichmässigsten auf TV 1 und TV 2 spielt.
+ * Bringt die Paarungen einer Hin- oder Rückrunde in eine Spielreihenfolge. Jedes Spiel hat mit den
+ * `lookback` Spielen davor keinen Spieler gemeinsam, so kann bei 2 Fernsehern immer nahtlos das nächste
+ * Spiel starten, ohne dass jemand noch auf dem anderen Fernseher spielt. Unter den erlaubten Spielen
+ * wird das gewählt, bei dem die Spieler am längsten pausiert haben (Suche mit Zurückgehen bei Sackgassen).
+ */
+function orderLeg(pairs, lastPlayed, tail, startPos, lookback) {
+  const used = new Array(pairs.length).fill(false);
+  const order = [];
+  const last = [...lastPlayed];
+  const recent = [...tail];
+  let nodes = 0;
+
+  const search = (pos) => {
+    if (order.length === pairs.length) return true;
+    if (++nodes > 150000) return false;
+    const candidates = [];
+    pairs.forEach((pair, idx) => {
+      if (used[idx]) return;
+      for (let k = 1; k <= lookback && k <= recent.length; k++) {
+        if (sharesPlayer(pair, recent[recent.length - k])) return;
+      }
+      const [h, a] = pair;
+      const rest = Math.min(pos - last[h], pos - last[a]);
+      candidates.push({ idx, score: rest * 10 + (pos - last[h]) + (pos - last[a]) });
+    });
+    candidates.sort((x, y) => y.score - x.score || x.idx - y.idx);
+    for (const { idx } of candidates) {
+      const [h, a] = pairs[idx];
+      const before = [last[h], last[a]];
+      used[idx] = true;
+      order.push(idx);
+      last[h] = pos;
+      last[a] = pos;
+      recent.push(pairs[idx]);
+      if (search(pos + 1)) return true;
+      recent.pop();
+      last[h] = before[0];
+      last[a] = before[1];
+      order.pop();
+      used[idx] = false;
+    }
+    return false;
+  };
+  return search(startPos) ? { order, last, recent } : null;
+}
+
+/** Zählt Spiele, die mit einem der zwei Spiele davor einen Spieler teilen (je weniger, desto nahtloser). */
+function overlaps(sequence) {
+  let count = 0;
+  sequence.forEach((pair, i) => {
+    if (i >= 1 && sharesPlayer(pair, sequence[i - 1])) count += 10;
+    if (i >= 2 && sharesPlayer(pair, sequence[i - 2])) count += 1;
+  });
+  return count;
+}
+
+/** Spielplan für 2 Fernseher: Reihenfolge wie oben, je zwei aufeinanderfolgende Spiele bilden eine Runde (TV 1 und TV 2). */
+function buildTwoTvSchedule(numPlayers, doubleRoundRobin, shift) {
+  const legs = [legPairings(numPlayers, shift)];
+  if (doubleRoundRobin) legs.push(legPairings(numPlayers, shift).map(([h, a]) => [a, h]));
+  let last = new Array(numPlayers).fill(-5);
+  let recent = [];
+  const sequence = [];
+  for (const pairs of legs) {
+    let result = null;
+    for (const lookback of [2, 1, 0]) {
+      result = orderLeg(pairs, last, recent, sequence.length, lookback);
+      if (result) break;
+    }
+    result.order.forEach((idx) => sequence.push(pairs[idx]));
+    last = result.last;
+    recent = result.recent.slice(-2);
+  }
+  const matches = sequence.map(([h, a], i) => ({
+    id: i,
+    homePlayer: h,
+    awayPlayer: a,
+    homeGoals: null,
+    awayGoals: null,
+    tv: (i % 2) + 1,
+    round: Math.floor(i / 2) + 1,
+  }));
+  balanceTvs(matches, numPlayers);
+  return { matches, overlaps: overlaps(sequence) };
+}
+
+/**
+ * Erstellt den Spielplan. Bei 2 Fernsehern werden verschiedene Startreihenfolgen der Spieler probiert.
+ * Gewählt wird die mit den wenigsten Überschneidungen (nahtloser Wechsel) und danach der gleichmässigsten
+ * Verteilung auf TV 1 und TV 2.
  */
 export function scheduleMatches(numPlayers, numTVs = 1, doubleRoundRobin = false) {
   if (numTVs !== 2) return buildSchedule(numPlayers, numTVs, doubleRoundRobin, 0);
   let best = null;
-  let bestCost = Infinity;
+  let bestCost = [Infinity, Infinity];
   for (let shift = 0; shift < numPlayers; shift++) {
-    const candidate = buildSchedule(numPlayers, numTVs, doubleRoundRobin, shift);
-    const cost = tvImbalance(candidate, numPlayers);
-    if (cost < bestCost) {
-      best = candidate;
+    const candidate = buildTwoTvSchedule(numPlayers, doubleRoundRobin, shift);
+    const cost = [candidate.overlaps, tvImbalance(candidate.matches, numPlayers)];
+    if (cost[0] < bestCost[0] || (cost[0] === bestCost[0] && cost[1] < bestCost[1])) {
+      best = candidate.matches;
       bestCost = cost;
     }
   }
@@ -339,7 +440,7 @@ export function resolveKnockout(standings, config, stored = []) {
     const s = results.get(slot.id);
     const ready = home != null && away != null;
     const same = s && s.home === home && s.away === away;
-    const valid = ready && same && s.homeGoals != null && s.awayGoals != null && s.homeGoals !== s.awayGoals;
+    const valid = Boolean(ready && same && s.homeGoals != null && s.awayGoals != null && s.homeGoals !== s.awayGoals);
     const m = {
       ...slot,
       homePlayer: home,
@@ -442,18 +543,29 @@ const validGoals = (v) => Number.isInteger(v) && v >= 0 && v <= 99;
 export function applyOp(doc, op) {
   switch (op.type) {
     case 'groupResult': {
-      if (!(op.home === null && op.away === null) && !(validGoals(op.home) && validGoals(op.away))) return doc;
+      const clearing = op.home === null && op.away === null;
+      if (!clearing && !(validGoals(op.home) && validGoals(op.away))) return doc;
+      if (doc.phase === 'finished') return doc; // ein abgeschlossenes Turnier ändert sich nur nach dem Wiedereröffnen
+      if (clearing && doc.phase !== 'group') return doc; // in der K.O.-Runde nur korrigieren, nicht löschen
       if (!doc.matches.some((m) => m.id === op.id)) return doc;
       return { ...doc, matches: doc.matches.map((m) => (m.id === op.id ? { ...m, homeGoals: op.home, awayGoals: op.away } : m)) };
     }
     case 'koResult': {
+      if (doc.phase !== 'knockout') return doc;
       const match = knockoutOf(doc).find((m) => m.id === op.id);
-      if (!match || !match.ready) return doc;
+      if (!match) return doc;
       const clearing = op.home === null && op.away === null;
-      if (!clearing && (!validGoals(op.home) || !validGoals(op.away) || op.home === op.away)) return doc;
+      if (clearing) {
+        // Auch veraltete Einträge dürfen gelöscht werden
+        const kept = (doc.knockoutMatches || []).filter((s) => s.id !== op.id);
+        return kept.length === (doc.knockoutMatches || []).length ? doc : { ...doc, knockoutMatches: kept };
+      }
+      if (!match.ready) return doc;
+      if (!validGoals(op.home) || !validGoals(op.away) || op.home === op.away) return doc;
+      // Die Eingabe galt für eine bestimmte Paarung. Hat sie sich inzwischen geändert, wird nichts überschrieben.
+      if ((op.homePlayer != null && op.homePlayer !== match.homePlayer) || (op.awayPlayer != null && op.awayPlayer !== match.awayPlayer)) return doc;
       const rest = (doc.knockoutMatches || []).filter((s) => s.id !== op.id);
-      const entry = clearing ? [] : [{ id: op.id, home: match.homePlayer, away: match.awayPlayer, homeGoals: op.home, awayGoals: op.away }];
-      return { ...doc, knockoutMatches: [...rest, ...entry] };
+      return { ...doc, knockoutMatches: [...rest, { id: op.id, home: match.homePlayer, away: match.awayPlayer, homeGoals: op.home, awayGoals: op.away }] };
     }
     case 'startKnockout':
       return doc.phase === 'group' && allGroupPlayed(doc) ? { ...doc, phase: 'knockout' } : doc;
@@ -468,18 +580,36 @@ export function applyOp(doc, op) {
     case 'reopen':
       return doc.phase === 'finished' ? { ...doc, phase: 'knockout', winner: null, loser: null } : doc;
     case 'renamePlayer': {
-      if (!doc.players[op.index]) return doc;
-      const players = doc.players.map((p, i) => (i === op.index ? { ...p, name: String(op.name).slice(0, 30), team: String(op.team ?? p.team ?? '').slice(0, 30) } : p));
+      if (!doc.players[op.index] || typeof op.name !== 'string' || !op.name.trim()) return doc;
+      const team = typeof op.team === 'string' ? op.team : doc.players[op.index].team || '';
+      const players = doc.players.map((p, i) => (i === op.index ? { ...p, name: op.name.trim().slice(0, 30), team: team.slice(0, 30) } : p));
       return { ...doc, players };
     }
     case 'rename':
-      return { ...doc, name: String(op.name).slice(0, 60) };
+      return typeof op.name === 'string' ? { ...doc, name: op.name.slice(0, 60) } : doc;
     default:
       return doc;
   }
 }
 
 export const applyOps = (doc, ops) => ops.reduce(applyOp, doc);
+
+const RESULT_OPS = new Set(['groupResult', 'koResult', 'renamePlayer']);
+
+/**
+ * Wie applyOps, meldet aber zusätzlich Eingaben, die nicht übernommen wurden (z. B. weil ein anderes Handy
+ * inzwischen die Paarung oder die Phase geändert hat). So lässt sich der Benutzer informieren.
+ */
+export function applyOpsReport(doc, ops) {
+  const dropped = [];
+  let current = doc;
+  for (const op of ops) {
+    const next = applyOp(current, op);
+    if (next === current && RESULT_OPS.has(op.type)) dropped.push(op);
+    current = next;
+  }
+  return { doc: current, dropped };
+}
 
 /** Gibt true zurück, wenn eine Änderung an Gruppenergebnissen K.O.-Ergebnisse beeinflussen könnte. */
 export function groupEditAffectsKnockout(doc) {

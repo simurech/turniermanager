@@ -23,9 +23,18 @@ export default function NewTournament() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const [listState, setListState] = useState('loading'); // loading | ok | error
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    api.listTournaments().then((r) => setFinished(r.tournaments.filter((t) => t.phase === 'finished'))).catch(() => {});
-  }, [admin]);
+    setListState('loading');
+    api
+      .listTournaments()
+      .then((r) => {
+        setFinished(r.tournaments.filter((t) => t.phase === 'finished'));
+        setListState('ok');
+      })
+      .catch(() => setListState('error'));
+  }, [admin, reloadKey]);
 
   // Vorgänger gewählt: Spieler, Marker und Einstellungen als Vorschlag übernehmen
   useEffect(() => {
@@ -98,6 +107,12 @@ export default function NewTournament() {
           <input id="tname" className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
         </div>
 
+        {listState === 'error' && (
+          <p className="error" role="alert">
+            Die früheren Turniere konnten nicht geladen werden. Ohne diese Liste kann kein Vorjahr als Basis gewählt werden.{' '}
+            <button type="button" className="link" onClick={() => setReloadKey((n) => n + 1)}>Erneut laden</button>
+          </p>
+        )}
         {finished.length > 0 && (
           <div className="field">
             <label htmlFor="prev">Vorjahr als Basis (optional)</label>
@@ -158,7 +173,7 @@ export default function NewTournament() {
           </div>
         )}
         <p className="notice">Nach dem Start bekommt das Turnier einen 4-stelligen PIN. Nur wer ihn kennt, darf Ergebnisse eintragen. Alle anderen können zuschauen.</p>
-        <button className="btn" style={{ width: 'calc(100% - 4px)' }} disabled={busy || problems.length > 0}>
+        <button className="btn" style={{ width: 'calc(100% - 4px)' }} disabled={busy || problems.length > 0 || listState !== 'ok'}>
           {busy ? 'Erstelle …' : 'Turnier starten'}
         </button>
       </form>

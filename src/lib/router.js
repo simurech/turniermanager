@@ -35,7 +35,11 @@ export function useRoute() {
     };
   }, []);
   useEffect(() => {
-    if (route.legacy) navigate(`/t/${route.id}`, { replace: true });
+    if (route.legacy) {
+      const rest = new URLSearchParams(window.location.search);
+      rest.delete('turnier');
+      navigate(`/t/${route.id}${rest.toString() ? `?${rest}` : ''}`, { replace: true });
+    }
   }, [route]);
   return route;
 }

@@ -7,26 +7,61 @@ declare(strict_types=1);
  * Lesen ist öffentlich (list, load). Schreiben braucht den Turnier-PIN (Header X-Pin)
  * oder den globalen Admin-Code (Header X-Admin). Der Speicher liegt wenn möglich
  * ausserhalb des Webroots (../tm-private), sonst in ./data mit Zugriffssperre.
+ *
+ * Fehler werden nie als PHP-Text ausgegeben, sondern geloggt und als JSON gemeldet.
  */
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
 date_default_timezone_set('Europe/Zurich');
-
-const ID_ALPHABET = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789';
-const MAX_BODY_BYTES = 262144;
-const MAX_PHOTO_BYTES = 1500000;
-const PIN_MAX_FAILS = 5;
-const PIN_WINDOW = 600;
-const PIN_MAX_FAILS_DAY = 20; // zusätzlich pro Tag: macht Durchprobieren von 10'000 PINs unpraktikabel
-const CREATE_PER_IP_PER_DAY = 5;
-const CREATE_GLOBAL_PER_DAY = 50;
-const EMPTY_TOURNAMENT_DAYS = 7;
-const PHASES = ['setup', 'group', 'knockout', 'finished'];
-const DATA_KEYS = ['name', 'config', 'players', 'matches', 'standings', 'knockoutMatches', 'phase', 'winner', 'loser'];
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+
+set_error_handler(static function (int $no, string $message, string $file, int $line): bool {
+    error_log("api.php [$no] $message in $file:$line");
+    return true; // Warnungen werden geloggt und nie in die Antwort geschrieben
+});
+set_exception_handler(static function (Throwable $e): void {
+    error_log('api.php exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+    echo json_encode(['error' => 'Interner Fehler. Bitte erneut versuchen.']);
+});
+register_shutdown_function(static function (): void {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        error_log("api.php fatal: {$e['message']} in {$e['file']}:{$e['line']}");
+        if (!headers_sent()) {
+            http_response_code(500);
+        }
+        echo json_encode(['error' => 'Interner Fehler. Bitte erneut versuchen.']);
+    }
+});
+
+const ID_ALPHABET = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789';
+const MAX_BODY_BYTES = 262144;
+const MAX_PHOTO_BYTES = 1500000;
+const MAX_PHOTO_PIXELS = 16000000;
+const MAX_PHOTO_SIDE = 8000;
+const EMPTY_TOURNAMENT_DAYS = 60;
+const PHASES = ['setup', 'group', 'knockout', 'finished'];
+const DATA_KEYS = ['name', 'config', 'players', 'matches', 'standings', 'knockoutMatches', 'phase', 'winner', 'loser'];
+
+/** Grenzen für Fehlversuche: pro Adresse in 10 Minuten, pro Adresse und Tag, insgesamt pro Tag. */
+const PIN_LIMITS = ['ip10' => 10, 'ipDay' => 30, 'allDay' => 100];
+const ADMIN_LIMITS = ['ip10' => 8, 'ipDay' => 40, 'allDay' => 200];
+
+/** Grenzwerte lassen sich für Tests über Umgebungsvariablen anheben. */
+function env_limit(string $name, int $default): int
+{
+    $value = getenv($name);
+    return ($value !== false && ctype_digit($value)) ? (int) $value : $default;
+}
 
 function fail(int $status, string $message, array $extra = []): never
 {
@@ -61,17 +96,21 @@ function storage_dir(): string
         if (!is_dir($candidate)) {
             @mkdir($candidate, 0750, true);
         }
-        if (is_dir($candidate) && is_writable($candidate)) {
-            if (str_starts_with($candidate, __DIR__ . '/') && !file_exists($candidate . '/.htaccess')) {
-                @file_put_contents($candidate . '/.htaccess', "Require all denied\n");
-            }
-            foreach (['tournaments', 'ratelimit'] as $sub) {
-                if (!is_dir("$candidate/$sub")) {
-                    @mkdir("$candidate/$sub", 0750, true);
-                }
-            }
-            return $dir = $candidate;
+        if (!is_dir($candidate) || !is_writable($candidate)) {
+            continue;
         }
+        if (str_starts_with($candidate, __DIR__ . '/') && !file_exists($candidate . '/.htaccess')) {
+            @file_put_contents($candidate . '/.htaccess', "Require all denied\n");
+        }
+        foreach (['tournaments', 'ratelimit'] as $sub) {
+            if (!is_dir("$candidate/$sub")) {
+                @mkdir("$candidate/$sub", 0750, true);
+            }
+            if (!is_dir("$candidate/$sub") || !is_writable("$candidate/$sub")) {
+                continue 2;
+            }
+        }
+        return $dir = $candidate;
     }
     fail(500, 'Speicherverzeichnis nicht beschreibbar');
 }
@@ -111,12 +150,17 @@ function valid_id(mixed $id): bool
 
 function read_tournament(string $id): ?array
 {
-    $raw = @file_get_contents(tournament_path($id));
-    if ($raw === false) {
+    $path = tournament_path($id);
+    if (!is_file($path)) {
         return null;
     }
-    $doc = json_decode($raw, true);
-    return is_array($doc) ? $doc : null;
+    $raw = file_get_contents($path);
+    $doc = $raw === false ? null : json_decode($raw, true);
+    if (!is_array($doc)) {
+        error_log("api.php: Turnierdatei $id ist unlesbar oder beschädigt");
+        fail(500, 'Turnierdatei konnte nicht gelesen werden');
+    }
+    return $doc;
 }
 
 function write_tournament(array $doc): void
@@ -125,6 +169,7 @@ function write_tournament(array $doc): void
     $tmp = $path . '.tmp';
     $json = json_encode($doc, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     if ($json === false || file_put_contents($tmp, $json) === false || !rename($tmp, $path)) {
+        @unlink($tmp);
         fail(500, 'Fehler beim Speichern');
     }
 }
@@ -147,52 +192,133 @@ function generate_pin(): string
 
 // ---------------------------------------------------------------- Rate-Limit
 
-function rate_file(string $key): string
+/** Führt $fn mit dem Inhalt einer Rate-Limit-Datei unter exklusiver Sperre aus und speichert die Änderungen. */
+function rate_update(string $name, callable $fn): mixed
 {
-    return storage_dir() . '/ratelimit/' . hash('sha256', $key) . '.json';
-}
-
-/** @return list<int> Zeitstempel innerhalb des Fensters */
-function rate_hits(string $key, int $window): array
-{
-    $raw = @file_get_contents(rate_file($key));
-    $hits = $raw ? json_decode($raw, true) : [];
-    $limit = time() - $window;
-    return array_values(array_filter(is_array($hits) ? $hits : [], fn($t) => is_int($t) && $t > $limit));
-}
-
-function rate_add(string $key, int $window): void
-{
-    $hits = rate_hits($key, $window);
-    $hits[] = time();
-    file_put_contents(rate_file($key), json_encode($hits), LOCK_EX);
-}
-
-function rate_clear(string $key): void
-{
-    @unlink(rate_file($key));
-}
-
-function rate_block_if_exceeded(string $key, int $max, int $window, string $message): void
-{
-    $hits = rate_hits($key, $window);
-    if (count($hits) >= $max) {
-        $retry = max(1, $window - (time() - min($hits)));
-        header("Retry-After: $retry");
-        fail(429, $message, ['retryAfter' => $retry]);
+    $path = storage_dir() . '/ratelimit/' . preg_replace('/[^A-Za-z0-9_-]/', '_', $name) . '.json';
+    $handle = fopen($path, 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        error_log("api.php: Rate-Limit-Datei $name nicht beschreibbar");
+        fail(500, 'Speicher nicht beschreibbar');
     }
+    try {
+        $raw = stream_get_contents($handle);
+        $state = $raw ? json_decode($raw, true) : [];
+        if (!is_array($state)) {
+            $state = [];
+        }
+        $result = $fn($state);
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, json_encode($state));
+        fflush($handle);
+        return $result;
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
+/** @param list<array{0:int,1:string}> $entries */
+function prune_entries(array $entries, int $now, int $window): array
+{
+    return array_values(array_filter($entries, static fn($e) => is_array($e) && ($e[0] ?? 0) > $now - $window));
 }
 
 function client_ip(): string
 {
-    $forwarded = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
-    if ($forwarded !== '') {
-        $first = trim(explode(',', $forwarded)[0]);
-        if (filter_var($first, FILTER_VALIDATE_IP)) {
-            return $first;
+    // Auf dem Hosting ist REMOTE_ADDR die echte Adresse. X-Forwarded-For ist fälschbar und wird ignoriert.
+    return (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+}
+
+function ip_key(): string
+{
+    return substr(sha1(client_ip()), 0, 16);
+}
+
+/**
+ * Prüft Zugangsdaten mit Fehlversuch-Zähler. Der Versuch wird vor der Prüfung gezählt (atomar unter Sperre),
+ * damit gleichzeitige Anfragen das Limit nicht umgehen können. Bei Erfolg wird er wieder abgezogen.
+ */
+function guarded_check(string $file, array $limits, callable $verify): bool
+{
+    $ip = ip_key();
+    $token = bin2hex(random_bytes(6));
+    $wait = rate_update($file, static function (array &$s) use ($ip, $limits, $token): int {
+        $now = time();
+        $s['all'] = prune_entries($s['all'] ?? [], $now, 86400);
+        foreach (($s['ips'] ?? []) as $key => $list) {
+            $s['ips'][$key] = prune_entries($list, $now, 86400);
+            if (!$s['ips'][$key]) {
+                unset($s['ips'][$key]);
+            }
         }
+        $mine = $s['ips'][$ip] ?? [];
+        $recent = array_values(array_filter($mine, static fn($e) => $e[0] > $now - 600));
+        $wait = 0;
+        if (count($recent) >= $limits['ip10']) {
+            $wait = max($wait, min(array_column($recent, 0)) + 600 - $now);
+        }
+        if (count($mine) >= $limits['ipDay']) {
+            $wait = max($wait, min(array_column($mine, 0)) + 86400 - $now);
+        }
+        if (count($s['all']) >= $limits['allDay']) {
+            $wait = max($wait, min(array_column($s['all'], 0)) + 86400 - $now);
+        }
+        if ($wait > 0) {
+            return $wait;
+        }
+        $s['ips'][$ip][] = [$now, $token];
+        $s['all'][] = [$now, $token];
+        return 0;
+    });
+    if ($wait > 0) {
+        header("Retry-After: $wait");
+        fail(429, 'Zu viele Fehlversuche. Bitte später erneut versuchen.', ['retryAfter' => $wait]);
     }
-    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $ok = (bool) $verify();
+    if ($ok) {
+        rate_update($file, static function (array &$s) use ($ip, $token): void {
+            $drop = static fn(array $list): array => array_values(array_filter($list, static fn($e) => ($e[1] ?? '') !== $token));
+            $s['all'] = $drop($s['all'] ?? []);
+            if (isset($s['ips'][$ip])) {
+                $s['ips'][$ip] = $drop($s['ips'][$ip]);
+            }
+        });
+    }
+    return $ok;
+}
+
+/** Zählt ein neues Turnier. Gibt die Wartezeit in Sekunden zurück, 0 wenn erlaubt. */
+function create_slot(): int
+{
+    $perIp = env_limit('TM_CREATE_PER_IP', 5);
+    $global = env_limit('TM_CREATE_GLOBAL', 50);
+    $ip = ip_key();
+    return rate_update('create', static function (array &$s) use ($ip, $perIp, $global): int {
+        $now = time();
+        $s['all'] = prune_entries($s['all'] ?? [], $now, 86400);
+        foreach (($s['ips'] ?? []) as $key => $list) {
+            $s['ips'][$key] = prune_entries($list, $now, 86400);
+            if (!$s['ips'][$key]) {
+                unset($s['ips'][$key]);
+            }
+        }
+        $mine = $s['ips'][$ip] ?? [];
+        $wait = 0;
+        if (count($mine) >= $perIp) {
+            $wait = max($wait, min(array_column($mine, 0)) + 86400 - $now);
+        }
+        if (count($s['all']) >= $global) {
+            $wait = max($wait, min(array_column($s['all'], 0)) + 86400 - $now);
+        }
+        if ($wait > 0) {
+            return $wait;
+        }
+        $s['ips'][$ip][] = [$now, ''];
+        $s['all'][] = [$now, ''];
+        return 0;
+    });
 }
 
 // ---------------------------------------------------------------- Auth
@@ -207,46 +333,63 @@ function admin_hash(): ?string
     return is_array($config) && is_string($config['admin_hash'] ?? null) ? $config['admin_hash'] : null;
 }
 
+function verify_pin(array $t, string $pin): bool
+{
+    if (is_string($t['pin'] ?? null)) {
+        return hash_equals($t['pin'], $pin);
+    }
+    // ältere Turniere ohne lesbaren PIN
+    return is_string($t['pinHash'] ?? null) && password_verify($pin, $t['pinHash']);
+}
+
+/** Ändert sich, sobald der PIN eines Turniers neu gesetzt wird. */
+function pin_fingerprint(array $t): string
+{
+    return ($t['pin'] ?? '') . '|' . ($t['pinHash'] ?? '');
+}
+
+function check_pin(array $t, string $pin): bool
+{
+    return guarded_check('pin-' . $t['id'], PIN_LIMITS, static fn() => preg_match('/\A\d{4}\z/', $pin) === 1 && verify_pin($t, $pin));
+}
+
+function check_admin(string $code): bool
+{
+    return guarded_check('admin', ADMIN_LIMITS, static function () use ($code): bool {
+        $hash = admin_hash();
+        return $hash !== null && password_verify($code, $hash);
+    });
+}
+
 /**
- * Prüft die mitgesendeten Zugangsdaten. Gibt 'admin', 'pin' oder null zurück
- * (null = nichts mitgesendet). Falsche Angaben zählen als Fehlversuch.
+ * Prüft die mitgesendeten Zugangsdaten. Gibt 'admin', 'pin' oder null zurück (null = nichts mitgesendet).
+ * Ist nichts davon gültig, endet die Anfrage mit 403. Ein gültiger PIN macht einen veralteten Admin-Code
+ * unschädlich, weil der PIN zuerst geprüft wird (ausser $adminFirst).
  * $t = null prüft nur den Admin-Code.
  */
-function authenticate(?array $t): ?string
+function authenticate(?array $t, bool $adminFirst = false): ?string
 {
-    $admin = $_SERVER['HTTP_X_ADMIN'] ?? '';
-    $pin = $_SERVER['HTTP_X_PIN'] ?? '';
-    $adminKey = 'admin';
-    $pinKey = $t ? 'pin:' . $t['id'] : null;
-
-    if ($admin !== '') {
-        rate_block_if_exceeded($adminKey, PIN_MAX_FAILS, PIN_WINDOW, 'Zu viele Fehlversuche. Bitte kurz warten.');
-        $hash = admin_hash();
-        if ($hash !== null && password_verify($admin, $hash)) {
-            rate_clear($adminKey);
-            return 'admin';
-        }
-        rate_add($adminKey, PIN_WINDOW);
+    $admin = (string) ($_SERVER['HTTP_X_ADMIN'] ?? '');
+    $pin = (string) ($_SERVER['HTTP_X_PIN'] ?? '');
+    $tryPin = $t !== null && $pin !== '';
+    $tryAdmin = $admin !== '';
+    if (!$tryPin && !$tryAdmin) {
+        return null;
     }
-    if ($pin !== '' && $t !== null) {
-        rate_block_if_exceeded($pinKey, PIN_MAX_FAILS, PIN_WINDOW, 'Zu viele Fehlversuche. Bitte kurz warten.');
-        rate_block_if_exceeded($pinKey . ':day', PIN_MAX_FAILS_DAY, 86400, 'Zu viele Fehlversuche für dieses Turnier. Bitte morgen erneut versuchen oder den Admin fragen.');
-        if (preg_match('/\A\d{4}\z/', $pin) === 1 && password_verify($pin, $t['pinHash'])) {
-            rate_clear($pinKey);
+    foreach ($adminFirst ? ['admin', 'pin'] : ['pin', 'admin'] as $kind) {
+        if ($kind === 'pin' && $tryPin && check_pin($t, $pin)) {
             return 'pin';
         }
-        rate_add($pinKey, PIN_WINDOW);
-        rate_add($pinKey . ':day', 86400);
+        if ($kind === 'admin' && $tryAdmin && check_admin($admin)) {
+            return 'admin';
+        }
     }
-    if ($admin !== '' || $pin !== '') {
-        fail(403, 'Falscher PIN oder Admin-Code');
-    }
-    return null;
+    fail(403, 'Falscher PIN oder Admin-Code');
 }
 
 function require_role(array $t, bool $adminOnly = false): string
 {
-    $role = authenticate($t);
+    $role = authenticate($t, $adminOnly);
     if ($role === null) {
         fail(401, $adminOnly ? 'Admin-Code erforderlich' : 'PIN erforderlich');
     }
@@ -290,6 +433,8 @@ function check_value(mixed $value, int $depth = 0): void
             }
             check_value($item, $depth + 1);
         }
+    } elseif (is_float($value) && !is_finite($value)) {
+        fail(400, 'Ungültige Zahl');
     } elseif (!is_int($value) && !is_float($value) && !is_bool($value) && $value !== null) {
         fail(400, 'Ungültiger Wert');
     }
@@ -331,11 +476,20 @@ function validate_data(mixed $data): array
     return $clean;
 }
 
+function body_id(array $body): string
+{
+    $id = $body['id'] ?? '';
+    if (!valid_id($id)) {
+        fail(400, 'Ungültige Turnier-ID');
+    }
+    return $id;
+}
+
 // ---------------------------------------------------------------- Ausgabe
 
 function public_view(array $t): array
 {
-    unset($t['pinHash']);
+    unset($t['pinHash'], $t['pin']);
     $t['hasPhoto'] = !empty($t['photoVersion']);
     return $t;
 }
@@ -343,7 +497,7 @@ function public_view(array $t): array
 function summary(array $t, bool $isAdmin): array
 {
     $players = $t['players'] ?? [];
-    $name = fn($i) => is_int($i) && isset($players[$i]['name']) ? $players[$i]['name'] : null;
+    $name = static fn($i) => is_int($i) && isset($players[$i]['name']) ? $players[$i]['name'] : null;
     $row = [
         'id' => $t['id'],
         'name' => $t['name'] ?? '',
@@ -367,41 +521,75 @@ function all_tournaments(): array
 {
     $result = [];
     foreach (glob(storage_dir() . '/tournaments/*.json') ?: [] as $file) {
-        $doc = json_decode((string) @file_get_contents($file), true);
+        $raw = file_get_contents($file);
+        $doc = $raw === false ? null : json_decode($raw, true);
         if (is_array($doc) && isset($doc['id'])) {
             $result[] = $doc;
+        } else {
+            error_log('api.php: überspringe unlesbare Datei ' . basename($file));
         }
     }
     return $result;
 }
 
-function delete_tournament(string $id): void
+function remove_file(string $path): void
 {
-    @unlink(tournament_path($id));
-    @unlink(photo_dir() . "/$id.jpg");
+    if (is_file($path) && !unlink($path)) {
+        error_log("api.php: konnte $path nicht löschen");
+        fail(500, 'Datei konnte nicht gelöscht werden');
+    }
 }
 
-/** Löscht leere Turniere (nie ein Spiel eingetragen) nach einigen Tagen. Läuft höchstens einmal pro Tag. */
+function delete_tournament(string $id): void
+{
+    remove_file(tournament_path($id));
+    remove_file(photo_dir() . "/$id.jpg");
+}
+
+/**
+ * Räumt höchstens einmal pro Tag auf: Turniere, in denen nie ein Spiel eingetragen wurde und die seit
+ * langer Zeit unverändert sind, sowie alte Rate-Limit- und Zwischendateien.
+ */
 function cleanup_empty(): void
 {
     $marker = storage_dir() . '/cleanup.marker';
     if (is_file($marker) && filemtime($marker) > time() - 86400) {
         return;
     }
-    touch($marker);
-    $limit = time() - EMPTY_TOURNAMENT_DAYS * 86400;
-    foreach (all_tournaments() as $t) {
-        $hasResults = false;
-        foreach (array_merge($t['matches'] ?? [], $t['knockoutMatches'] ?? []) as $m) {
-            if (is_array($m) && isset($m['homeGoals'])) {
-                $hasResults = true;
-                break;
+    with_lock(static function () use ($marker): void {
+        if (is_file($marker) && filemtime($marker) > time() - 86400) {
+            return;
+        }
+        touch($marker);
+        $limit = time() - EMPTY_TOURNAMENT_DAYS * 86400;
+        foreach (all_tournaments() as $t) {
+            $updated = strtotime((string) ($t['updatedAt'] ?? ''));
+            if ($updated === false) {
+                continue; // ohne gültiges Datum nie automatisch löschen
+            }
+            $hasResults = false;
+            foreach (array_merge($t['matches'] ?? [], $t['knockoutMatches'] ?? []) as $m) {
+                if (is_array($m) && isset($m['homeGoals'])) {
+                    $hasResults = true;
+                    break;
+                }
+            }
+            if (!$hasResults && ($t['phase'] ?? 'setup') !== 'finished' && $updated < $limit) {
+                error_log("api.php: lösche leeres Turnier {$t['id']} (zuletzt geändert {$t['updatedAt']})");
+                delete_tournament($t['id']);
             }
         }
-        if (!$hasResults && ($t['phase'] ?? 'setup') !== 'finished' && strtotime($t['updatedAt']) < $limit) {
-            delete_tournament($t['id']);
+        foreach (glob(storage_dir() . '/ratelimit/*') ?: [] as $file) {
+            if (filemtime($file) < time() - 3 * 86400) {
+                @unlink($file);
+            }
         }
-    }
+        foreach (glob(storage_dir() . '/tournaments/*.tmp') ?: [] as $file) {
+            if (filemtime($file) < time() - 3600) {
+                @unlink($file);
+            }
+        }
+    });
 }
 
 // ---------------------------------------------------------------- Aktionen
@@ -412,7 +600,7 @@ function action_list(): never
     if (($_SERVER['HTTP_X_ADMIN'] ?? '') !== '') {
         $isAdmin = authenticate(null) === 'admin';
     }
-    with_lock('cleanup_empty');
+    cleanup_empty();
     $rows = [];
     foreach (all_tournaments() as $t) {
         if (!empty($t['hidden']) && !$isAdmin) {
@@ -420,7 +608,7 @@ function action_list(): never
         }
         $rows[] = summary($t, $isAdmin);
     }
-    usort($rows, fn($a, $b) => strcmp($b['createdAt'], $a['createdAt']));
+    usort($rows, static fn($a, $b) => (strtotime($b['createdAt']) ?: 0) <=> (strtotime($a['createdAt']) ?: 0));
     respond(['tournaments' => $rows, 'isAdmin' => $isAdmin]);
 }
 
@@ -467,21 +655,26 @@ function action_create(): never
             fail(404, 'Vorgänger-Turnier nicht gefunden');
         }
         if (!$isAdmin) {
-            // Vorgänger-PIN prüfen, mit demselben Fehlversuch-Schutz.
-            $_SERVER['HTTP_X_PIN'] = (string) ($body['previousPin'] ?? '');
-            if (authenticate($previous) !== 'pin') {
+            $previousPin = $body['previousPin'] ?? null;
+            if (!is_string($previousPin) || $previousPin === '') {
                 fail(401, 'PIN des Vorgängers erforderlich');
+            }
+            if (!check_pin($previous, $previousPin)) {
+                fail(403, 'Falscher PIN des Vorgängers');
             }
         }
     }
 
     if (!$isAdmin) {
-        rate_block_if_exceeded('create:' . client_ip(), CREATE_PER_IP_PER_DAY, 86400, 'Zu viele neue Turniere heute. Bitte morgen erneut versuchen.');
-        rate_block_if_exceeded('create:all', CREATE_GLOBAL_PER_DAY, 86400, 'Heute wurden zu viele Turniere erstellt. Bitte später erneut versuchen.');
+        $wait = create_slot();
+        if ($wait > 0) {
+            header("Retry-After: $wait");
+            fail(429, 'Es wurden heute schon zu viele Turniere erstellt. Bitte später erneut versuchen.', ['retryAfter' => $wait]);
+        }
     }
 
     $pin = generate_pin();
-    $result = with_lock(function () use ($data, $previousId, $pin) {
+    $doc = with_lock(static function () use ($data, $previousId, $pin): array {
         $now = date('c');
         $doc = $data + ['phase' => 'setup'];
         $doc += [
@@ -491,37 +684,37 @@ function action_create(): never
             'updatedAt' => $now,
             'previousId' => $previousId,
             'hidden' => false,
-            'pinHash' => password_hash($pin, PASSWORD_BCRYPT),
+            'pin' => $pin,
         ];
         write_tournament($doc);
         return $doc;
     });
-    if (!$isAdmin) {
-        rate_add('create:' . client_ip(), 86400);
-        rate_add('create:all', 86400);
-    }
-    respond(['success' => true, 'id' => $result['id'], 'pin' => $pin, 'version' => 1], 201);
+    respond(['success' => true, 'id' => $doc['id'], 'pin' => $pin, 'version' => 1], 201);
 }
 
 function action_update(): never
 {
     $body = read_body();
-    $id = $body['id'] ?? '';
-    if (!valid_id($id)) {
-        fail(400, 'Ungültige Turnier-ID');
+    $id = body_id($body);
+    $t0 = read_tournament($id);
+    if ($t0 === null) {
+        fail(404, 'Turnier nicht gefunden');
     }
+    require_role($t0);
     $data = validate_data($body['data'] ?? null);
     $version = $body['version'] ?? null;
     if (!is_int($version)) {
         fail(400, 'Version fehlt');
     }
 
-    $result = with_lock(function () use ($id, $data, $version) {
+    $result = with_lock(static function () use ($id, $t0, $data, $version): array {
         $t = read_tournament($id);
         if ($t === null) {
             fail(404, 'Turnier nicht gefunden');
         }
-        require_role($t);
+        if (pin_fingerprint($t) !== pin_fingerprint($t0)) {
+            fail(403, 'Der PIN wurde inzwischen geändert');
+        }
         if ($t['version'] !== $version) {
             fail(409, 'Das Turnier wurde inzwischen geändert', ['current' => public_view($t)]);
         }
@@ -540,16 +733,18 @@ function action_update(): never
 function action_admin_change(string $kind): never
 {
     $body = read_body();
-    $id = $body['id'] ?? '';
-    if (!valid_id($id)) {
-        fail(400, 'Ungültige Turnier-ID');
+    $id = body_id($body);
+    $t0 = read_tournament($id);
+    if ($t0 === null) {
+        fail(404, 'Turnier nicht gefunden');
     }
-    $response = with_lock(function () use ($id, $kind, $body) {
+    require_role($t0, true);
+
+    $response = with_lock(static function () use ($id, $kind, $body): array {
         $t = read_tournament($id);
         if ($t === null) {
             fail(404, 'Turnier nicht gefunden');
         }
-        require_role($t, true);
         $out = ['success' => true];
         if ($kind === 'delete') {
             delete_tournament($id);
@@ -559,7 +754,9 @@ function action_admin_change(string $kind): never
             $t['hidden'] = (bool) ($body['hidden'] ?? true);
         } elseif ($kind === 'reset_pin') {
             $out['pin'] = generate_pin();
-            $t['pinHash'] = password_hash($out['pin'], PASSWORD_BCRYPT);
+            $t['pin'] = $out['pin'];
+            unset($t['pinHash']);
+            @unlink(storage_dir() . '/ratelimit/pin-' . $id . '.json'); // aufgehobene Sperre für den neuen PIN
         }
         $t['version']++;
         $t['updatedAt'] = date('c');
@@ -569,47 +766,78 @@ function action_admin_change(string $kind): never
     respond($response);
 }
 
+/** Der Admin kann den PIN eines Turniers jederzeit abrufen. Ältere Turniere haben ihn nicht gespeichert (dann null). */
+function action_get_pin(): never
+{
+    $body = read_body();
+    $id = body_id($body);
+    $t = read_tournament($id);
+    if ($t === null) {
+        fail(404, 'Turnier nicht gefunden');
+    }
+    require_role($t, true);
+    respond(['pin' => is_string($t['pin'] ?? null) ? $t['pin'] : null]);
+}
+
 /** Siegerfoto: wird neu als JPEG kodiert (entfernt EXIF/Zusatzdaten) und auf max. 1200 px verkleinert. */
 function action_photo(): never
 {
     $id = $_GET['id'] ?? '';
-    if (!valid_id($id) || ($t = read_tournament($id)) === null) {
+    if (!valid_id($id) || ($t0 = read_tournament($id)) === null) {
         fail(404, 'Turnier nicht gefunden');
     }
-    require_role($t);
+    require_role($t0);
 
     $file = $_FILES['photo'] ?? null;
-    if (!$file || $file['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'])) {
+    if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string) $file['tmp_name'])) {
         fail(400, 'Kein Foto empfangen');
     }
     if ($file['size'] > MAX_PHOTO_BYTES) {
         fail(413, 'Foto zu gross (max. 1.5 MB)');
     }
     $info = @getimagesize($file['tmp_name']);
-    $source = null;
-    if ($info !== false) {
-        $source = match ($info[2]) {
-            IMAGETYPE_JPEG => @imagecreatefromjpeg($file['tmp_name']),
-            IMAGETYPE_PNG => @imagecreatefrompng($file['tmp_name']),
-            IMAGETYPE_WEBP => @imagecreatefromwebp($file['tmp_name']),
-            default => null,
-        };
-    }
-    if (!$source) {
+    if ($info === false || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
         fail(400, 'Nur JPEG, PNG oder WebP erlaubt');
+    }
+    // Vor dem Dekodieren prüfen: kleine Dateien können riesige Bilder enthalten
+    if ($info[0] * $info[1] > MAX_PHOTO_PIXELS || max($info[0], $info[1]) > MAX_PHOTO_SIDE) {
+        fail(413, 'Das Foto hat zu viele Pixel. Bitte ein kleineres Bild wählen.');
+    }
+    $source = match ($info[2]) {
+        IMAGETYPE_JPEG => @imagecreatefromjpeg($file['tmp_name']),
+        IMAGETYPE_PNG => @imagecreatefrompng($file['tmp_name']),
+        default => @imagecreatefromwebp($file['tmp_name']),
+    };
+    if (!$source) {
+        fail(400, 'Das Bild konnte nicht gelesen werden');
     }
     [$w, $h] = [imagesx($source), imagesy($source)];
     $scale = min(1, 1200 / max($w, $h));
     $target = imagecreatetruecolor((int) round($w * $scale), (int) round($h * $scale));
     imagefill($target, 0, 0, imagecolorallocate($target, 255, 255, 255));
     imagecopyresampled($target, $source, 0, 0, 0, 0, imagesx($target), imagesy($target), $w, $h);
-    if (!imagejpeg($target, photo_dir() . "/$id.jpg", 82)) {
+
+    // Erst in eine Zwischendatei schreiben, dann unter Sperre atomar an den Platz verschieben
+    $tmp = photo_dir() . "/$id.tmp." . bin2hex(random_bytes(4));
+    if (!imagejpeg($target, $tmp, 82)) {
+        @unlink($tmp);
         fail(500, 'Foto konnte nicht gespeichert werden');
     }
-
-    $photoVersion = with_lock(function () use ($id) {
+    $photoVersion = with_lock(static function () use ($id, $t0, $tmp): int {
         $t = read_tournament($id);
-        $t['photoVersion'] = time();
+        if ($t === null) {
+            @unlink($tmp);
+            fail(404, 'Turnier nicht gefunden');
+        }
+        if (pin_fingerprint($t) !== pin_fingerprint($t0)) {
+            @unlink($tmp);
+            fail(403, 'Der PIN wurde inzwischen geändert');
+        }
+        if (!rename($tmp, photo_dir() . "/$id.jpg")) {
+            @unlink($tmp);
+            fail(500, 'Foto konnte nicht gespeichert werden');
+        }
+        $t['photoVersion'] = max(time(), ((int) ($t['photoVersion'] ?? 0)) + 1);
         $t['version']++;
         $t['updatedAt'] = date('c');
         write_tournament($t);
@@ -621,7 +849,7 @@ function action_photo(): never
 // ---------------------------------------------------------------- Routing
 
 $method = $_SERVER['REQUEST_METHOD'];
-$action = $_GET['action'] ?? '';
+$action = is_string($_GET['action'] ?? null) ? $_GET['action'] : '';
 
 if ($method === 'GET') {
     match ($action) {
@@ -636,6 +864,7 @@ if ($method === 'POST') {
         'update' => action_update(),
         'verify' => action_verify(),
         'admin_check' => action_admin_check(),
+        'get_pin' => action_get_pin(),
         'delete', 'hide', 'reset_pin' => action_admin_change($action),
         'photo' => action_photo(),
         default => fail(400, 'Unbekannte Aktion'),

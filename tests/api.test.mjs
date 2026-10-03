@@ -7,6 +7,7 @@ import { mkdtempSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSy
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8765;
@@ -49,7 +50,7 @@ before(async () => {
   const hash = execFileSync('php', ['-r', `echo password_hash('${ADMIN}', PASSWORD_BCRYPT);`]).toString();
   writeFileSync(join(storage, 'config.php'), `<?php return ['admin_hash' => '${hash}'];`);
   server = spawn('php', ['-S', `127.0.0.1:${PORT}`, '-t', join(root, 'public')], {
-    env: { ...process.env, TM_STORAGE: storage, TM_PHOTOS: photos },
+    env: { ...process.env, TM_STORAGE: storage, TM_PHOTOS: photos, TM_CREATE_PER_IP: '1000', TM_CREATE_GLOBAL: '1000' },
     stdio: 'ignore',
   });
   for (let i = 0; i < 50; i++) {
@@ -98,11 +99,11 @@ test('veraltete Version gibt 409 mit aktuellem Stand', async () => {
   assert.equal(conflict.json.current.pinHash, undefined);
 });
 
-test('nach 5 Fehlversuchen wird gesperrt, auch der richtige PIN', async () => {
+test('nach 10 Fehlversuchen wird gesperrt, auch der richtige PIN', async () => {
   const { json: t } = await create();
   const wrong = t.pin === '1234' ? '4321' : '1234';
   const body = { id: t.id, version: 1, data: sample() };
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 10; i++) {
     assert.equal((await call('update', { body, headers: { 'X-Pin': wrong } })).status, 403);
   }
   const blocked = await call('update', { body, headers: { 'X-Pin': t.pin } });
@@ -194,18 +195,136 @@ test('Foto: braucht PIN, nur Bilder, wird als JPEG gespeichert', async () => {
   assert.equal(loaded.json.hasPhoto, true);
 });
 
-test('Erstellen pro IP ist begrenzt, Admin nicht', async () => {
-  let last;
-  const sameIp = { 'X-Forwarded-For': '203.0.113.7' };
-  for (let i = 0; i < 6; i++) last = await create({}, sameIp);
-  assert.equal(last.status, 429);
-  assert.equal((await create({}, { 'X-Admin': ADMIN })).status, 201);
-});
-
-test('Turnier-Dateien liegen nur im Speicherordner und enthalten nur Hashes', () => {
-  const files = readdirSync(join(storage, 'tournaments')).filter(f => f.endsWith('.json'));
+test('Turnier-Dateien liegen nur im Speicherordner, der PIN ist nur dort lesbar', () => {
+  const files = readdirSync(join(storage, 'tournaments')).filter((f) => f.endsWith('.json'));
   assert.ok(files.length > 0);
   const doc = JSON.parse(readFileSync(join(storage, 'tournaments', files[0]), 'utf8'));
-  assert.match(doc.pinHash, /^\$2y\$/);
+  assert.match(doc.pin, /^\d{4}$/);
+  assert.equal(doc.pinHash, undefined);
   assert.ok(!existsSync(join(root, 'public', 'data', files[0])));
+});
+
+// ------------------------------------------------------------ Nachträglich ergänzte Prüfungen
+
+test('Admin kann den PIN jederzeit abrufen, alle anderen nicht', async () => {
+  const { json: t } = await create();
+  const adminH = { 'X-Admin': ADMIN };
+  const got = await call('get_pin', { body: { id: t.id }, headers: adminH });
+  assert.equal(got.status, 200);
+  assert.equal(got.json.pin, t.pin);
+  assert.equal((await call('get_pin', { body: { id: t.id }, headers: { 'X-Pin': t.pin } })).status, 403, 'PIN-Inhaber darf nicht über den Admin-Weg');
+  assert.equal((await call('get_pin', { body: { id: t.id } })).status, 401);
+  const reset = await call('reset_pin', { body: { id: t.id }, headers: adminH });
+  assert.equal((await call('get_pin', { body: { id: t.id }, headers: adminH })).json.pin, reset.json.pin);
+});
+
+test('der PIN taucht in load und list nie auf', async () => {
+  const { json: t } = await create();
+  const loaded = await call('load', { method: 'GET', query: `&id=${t.id}` });
+  assert.equal(loaded.json.pin, undefined);
+  assert.ok(!JSON.stringify(loaded.json).includes(t.pin) || !JSON.stringify(loaded.json).includes('"pin"'));
+  const list = await call('list', { method: 'GET', headers: { 'X-Admin': ADMIN } });
+  assert.ok(!JSON.stringify(list.json).includes('"pin"'));
+  const conflict = await call('update', { body: { id: t.id, version: 99, data: sample() }, headers: { 'X-Pin': t.pin } });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.json.current.pin, undefined);
+});
+
+test('ältere Turniere ohne lesbaren PIN funktionieren weiter, get_pin liefert null', async () => {
+  const hash = execFileSync('php', ['-r', "echo password_hash('1234', PASSWORD_BCRYPT);"]).toString();
+  const now = new Date().toISOString();
+  const doc = { id: 'LGCY22', version: 1, createdAt: now, updatedAt: now, previousId: null, hidden: false, pinHash: hash, phase: 'group', players: [], matches: [] };
+  writeFileSync(join(storage, 'tournaments', 'LGCY22.json'), JSON.stringify(doc));
+  assert.equal((await call('verify', { query: '&id=LGCY22', headers: { 'X-Pin': '1234' } })).status, 200);
+  assert.equal((await call('get_pin', { body: { id: 'LGCY22' }, headers: { 'X-Admin': ADMIN } })).json.pin, null);
+  const reset = await call('reset_pin', { body: { id: 'LGCY22' }, headers: { 'X-Admin': ADMIN } });
+  assert.equal((await call('verify', { query: '&id=LGCY22', headers: { 'X-Pin': reset.json.pin } })).status, 200);
+  assert.equal((await call('get_pin', { body: { id: 'LGCY22' }, headers: { 'X-Admin': ADMIN } })).json.pin, reset.json.pin);
+});
+
+test('ein veralteter Admin-Code blockiert einen gültigen PIN nicht', async () => {
+  const { json: t } = await create();
+  for (let i = 0; i < 4; i++) {
+    const r = await call('update', { body: { id: t.id, version: i + 1, data: sample({ phase: 'group' }) }, headers: { 'X-Admin': 'veralteter-code-123456', 'X-Pin': t.pin } });
+    assert.equal(r.status, 200, `Versuch ${i + 1}`);
+  }
+});
+
+test('gleichzeitige Fehlversuche umgehen die Sperre nicht', async () => {
+  const { json: t } = await create();
+  const wrong = t.pin === '1234' ? '4321' : '1234';
+  const results = await Promise.all(Array.from({ length: 60 }, () => call('verify', { query: `&id=${t.id}`, headers: { 'X-Pin': wrong } })));
+  const evaluated = results.filter((r) => r.status === 403).length;
+  assert.ok(evaluated <= 10, `${evaluated} Versuche wurden geprüft (erlaubt: 10)`);
+  assert.ok(results.filter((r) => r.status === 429).length >= 50);
+});
+
+test('Admin setzt den PIN neu und hebt damit die Sperre auf', async () => {
+  const { json: t } = await create();
+  const wrong = t.pin === '1234' ? '4321' : '1234';
+  for (let i = 0; i < 11; i++) await call('verify', { query: `&id=${t.id}`, headers: { 'X-Pin': wrong } });
+  assert.equal((await call('verify', { query: `&id=${t.id}`, headers: { 'X-Pin': t.pin } })).status, 429);
+  const reset = await call('reset_pin', { body: { id: t.id }, headers: { 'X-Admin': ADMIN } });
+  assert.equal((await call('verify', { query: `&id=${t.id}`, headers: { 'X-Pin': reset.json.pin } })).status, 200);
+});
+
+test('falsche Datentypen führen zu einer sauberen JSON-Antwort statt zu PHP-Warnungen', async () => {
+  const { json: prev } = await create();
+  const res = await call('create', { body: { data: sample(), previousId: prev.id, previousPin: [1] } });
+  assert.equal(res.status, 401);
+  assert.ok(res.json?.error);
+  const res2 = await call('create', { body: { data: sample(), previousId: ['x'] } });
+  assert.equal(res2.status, 404);
+  const res3 = await call('update', { body: { id: ['A'], version: 1, data: sample() } });
+  assert.equal(res3.status, 400);
+  assert.equal((await call('load', { method: 'GET', query: '&id[]=A' })).status, 400);
+});
+
+test('Foto: zu grosse Pixelzahl wird vor dem Dekodieren abgelehnt', async () => {
+  const { json: t } = await create();
+  // PNG-Kopf mit 30000 x 30000 Pixeln, nur wenige Bytes gross
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(30000, 0); ihdr.writeUInt32BE(30000, 4); ihdr[8] = 1; ihdr[9] = 0;
+  const bomb = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IEND', Buffer.alloc(0))]);
+  const f = new FormData(); f.append('photo', new Blob([bomb], { type: 'image/png' }), 'b.png');
+  const started = Date.now();
+  const res = await fetch(`${BASE}?action=photo&id=${t.id}`, { method: 'POST', headers: { 'X-Pin': t.pin }, body: f });
+  assert.equal(res.status, 413);
+  assert.ok(Date.now() - started < 3000, 'wurde schnell abgelehnt');
+});
+
+test('Löschen entfernt Turnier und Foto', async () => {
+  const { json: t } = await create();
+  const f = new FormData(); f.append('photo', new Blob([PNG], { type: 'image/png' }), 'a.png');
+  assert.equal((await fetch(`${BASE}?action=photo&id=${t.id}`, { method: 'POST', headers: { 'X-Pin': t.pin }, body: f })).status, 200);
+  assert.ok(existsSync(join(photos, `${t.id}.jpg`)));
+  assert.equal((await call('delete', { body: { id: t.id }, headers: { 'X-Admin': ADMIN } })).status, 200);
+  assert.ok(!existsSync(join(photos, `${t.id}.jpg`)));
+  assert.ok(!existsSync(join(storage, 'tournaments', `${t.id}.json`)));
+});
+
+test('Erstellen ist pro Adresse begrenzt, der Admin nicht (Server mit echten Grenzwerten)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tm-limit-'));
+  const hash = execFileSync('php', ['-r', `echo password_hash('${ADMIN}', PASSWORD_BCRYPT);`]).toString();
+  writeFileSync(join(dir, 'config.php'), `<?php return ['admin_hash' => '${hash}'];`);
+  const port = 8766;
+  const srv = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', join(root, 'public')], { env: { ...process.env, TM_STORAGE: dir, TM_PHOTOS: dir }, stdio: 'ignore' });
+  try {
+    const url = `http://127.0.0.1:${port}/api.php?action=create`;
+    for (let i = 0; i < 50; i++) { try { await fetch(url, { method: 'POST', body: '{}' }); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
+    const make = (headers = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ data: sample() }) });
+    const statuses = [];
+    // Gefälschte X-Forwarded-For-Werte dürfen das Limit nicht aushebeln
+    for (let i = 0; i < 7; i++) statuses.push((await make({ 'X-Forwarded-For': `198.51.100.${i}` })).status);
+    assert.deepEqual(statuses, [201, 201, 201, 201, 201, 429, 429]);
+    assert.equal((await make({ 'X-Admin': ADMIN })).status, 201);
+  } finally {
+    srv.kill();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

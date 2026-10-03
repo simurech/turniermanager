@@ -18,6 +18,7 @@ RedirectMatch 403 ^/(data|tm-private)(/|$)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_URI} !^/api\.php
+RewriteCond %{REQUEST_URI} !^/(assets|photos)/
 RewriteRule . /index.html [L]
 
 # Sicherheits-Header

@@ -298,16 +298,14 @@ export function roundPercents(values) {
 }
 
 /**
- * Die Spiele, die als Nächstes gleichzeitig laufen: bei 2 Fernsehern bis zu zwei.
- * Gruppenphase: alle offenen Spiele der kleinsten offenen Runde. K.O.: die bereiten, noch offenen Spiele.
+ * Die Spiele, die als Nächstes gleichzeitig laufen: bei 2 Fernsehern immer die nächsten zwei offenen.
+ * Gruppenphase: die ersten offenen Spiele der Spielreihenfolge. K.O.: die bereiten, noch offenen Spiele.
  */
 export function nextMatches(doc) {
   const tvs = doc.config?.numTVs || 1;
   if (doc.phase === 'group') {
-    const open = (doc.matches || []).filter((m) => !isPlayed(m));
-    if (!open.length) return [];
-    const round = Math.min(...open.map((m) => m.round));
-    return open.filter((m) => m.round === round).sort((a, b) => a.tv - b.tv);
+    // Die ersten offenen Spiele der Spielreihenfolge: wird eines fertig, rückt sofort das nächste nach
+    return (doc.matches || []).filter((m) => !isPlayed(m)).sort((a, b) => a.id - b.id).slice(0, tvs).sort((a, b) => a.tv - b.tv);
   }
   if (doc.phase === 'knockout') return knockoutOf(doc).filter((m) => m.ready && !m.done).slice(0, tvs);
   return [];

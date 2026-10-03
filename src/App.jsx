@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Component, useEffect } from 'react';
 import { AppProvider } from './context.jsx';
 import { useRoute } from './lib/router.js';
 import Home from './components/Home.jsx';
@@ -15,10 +15,39 @@ function Screen() {
   return <Home />;
 }
 
+/** Fängt unerwartete Darstellungsfehler ab, damit nie ein leerer weisser Bildschirm bleibt. */
+class ErrorBoundary extends Component {
+  state = { error: null };
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error(error, info);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main className="app no-tabs">
+        <h1 className="logo" style={{ marginTop: 40 }}>Hoppla</h1>
+        <p className="error" role="alert" style={{ marginTop: 16 }}>
+          Etwas ist schiefgelaufen. Bereits eingetragene Ergebnisse sind gespeichert, noch offene werden nach dem Neuladen automatisch nachgesendet.
+        </p>
+        <button className="btn" onClick={() => window.location.reload()}>Neu laden</button>
+        <p className="center"><button className="link" onClick={() => { window.location.href = '/'; }}>Zur Startseite</button></p>
+      </main>
+    );
+  }
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <Screen />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <Screen />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

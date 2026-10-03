@@ -8,6 +8,8 @@ import {
   createDoc,
   applyOp,
   applyOps,
+  applyOpsReport,
+  groupBy,
   deriveState,
   DEFAULT_CONFIG,
 } from '../src/lib/tournament.js';
@@ -327,5 +329,89 @@ describe('Dokument und Ops', () => {
     const d = applyOp(doc(), { type: 'renamePlayer', index: 1, name: 'A & B'.padEnd(80, 'x'), team: 'FC Bayern' });
     expect(d.players[1].name).toHaveLength(30);
     expect(d.players[1].team).toBe('FC Bayern');
+  });
+});
+
+describe('Schutz vor falschen Phasen und geänderten Paarungen (Wiederholung nach Konflikt)', () => {
+  const played = (doc) => applyOps(doc, doc.matches.map((m, i) => ({ type: 'groupResult', id: m.id, home: i % 4, away: (i + 1) % 3 })));
+  const fresh = () => createDoc({ name: 'T', players: names(7), config: {} });
+  const inKnockout = () => applyOp(played(fresh()), { type: 'startKnockout' });
+
+  it('K.O.-Ergebnis wird in der Gruppenphase abgelehnt, auch nach „Zurück zur Gruppenphase“', () => {
+    const group = played(fresh());
+    expect(applyOp(group, { type: 'koResult', id: 'sf1', home: 3, away: 0 })).toBe(group);
+    const back = applyOp(inKnockout(), { type: 'backToGroup' });
+    expect(back.phase).toBe('group');
+    const replay = applyOp(back, { type: 'koResult', id: 'sf1', home: 3, away: 0 });
+    expect(replay.knockoutMatches).toHaveLength(0);
+    // Auch nach erneutem Start bleibt das Halbfinale offen
+    const again = applyOp(replay, { type: 'startKnockout' });
+    expect(deriveState(again).knockout.find((m) => m.id === 'sf1').done).toBe(false);
+  });
+
+  it('K.O.-Ergebnis wird im abgeschlossenen Turnier abgelehnt', () => {
+    let d = inKnockout();
+    for (const id of ['sf1', 'sf2', 'final', 'third', 'ls1', 'lf']) d = applyOp(d, { type: 'koResult', id, home: 2, away: 1 });
+    d = applyOp(d, { type: 'finish' });
+    expect(d.phase).toBe('finished');
+    expect(applyOp(d, { type: 'koResult', id: 'final', home: 0, away: 5 })).toBe(d);
+  });
+
+  it('K.O.-Ergebnis gilt nur für die Paarung, für die es eingegeben wurde', () => {
+    const d = inKnockout();
+    const sf1 = deriveState(d).knockout.find((m) => m.id === 'sf1');
+    const ok = applyOp(d, { type: 'koResult', id: 'sf1', home: 2, away: 0, homePlayer: sf1.homePlayer, awayPlayer: sf1.awayPlayer });
+    expect(ok.knockoutMatches).toHaveLength(1);
+    const other = applyOp(d, { type: 'koResult', id: 'sf1', home: 2, away: 0, homePlayer: sf1.homePlayer, awayPlayer: (sf1.awayPlayer + 1) % 7 });
+    expect(other).toBe(d);
+  });
+
+  it('Gruppenergebnis: im abgeschlossenen Turnier gesperrt, in der K.O.-Runde nur ändern, nicht löschen', () => {
+    let d = inKnockout();
+    expect(applyOp(d, { type: 'groupResult', id: 0, home: null, away: null })).toBe(d);
+    expect(applyOp(d, { type: 'groupResult', id: 0, home: 5, away: 0 }).matches[0].homeGoals).toBe(5);
+    for (const id of ['sf1', 'sf2', 'final', 'third', 'ls1', 'lf']) d = applyOp(d, { type: 'koResult', id, home: 2, away: 1 });
+    const finished = applyOp(d, { type: 'finish' });
+    expect(applyOp(finished, { type: 'groupResult', id: 0, home: 9, away: 9 })).toBe(finished);
+  });
+
+  it('veraltete K.O.-Ergebnisse lassen sich auch dann löschen, wenn das Spiel nicht mehr bereit ist', () => {
+    const d = { ...inKnockout(), knockoutMatches: [{ id: 'final', home: 0, away: 1, homeGoals: 1, awayGoals: 0 }] };
+    const cleared = applyOp(d, { type: 'koResult', id: 'final', home: null, away: null });
+    expect(cleared.knockoutMatches).toHaveLength(0);
+  });
+
+  it('applyOpsReport meldet nicht übernommene Eingaben, übernimmt gültige', () => {
+    const group = played(fresh());
+    const { doc, dropped } = applyOpsReport(group, [
+      { type: 'groupResult', id: 0, home: 7, away: 7 },
+      { type: 'koResult', id: 'sf1', home: 1, away: 0 }, // falsche Phase
+      { type: 'groupResult', id: 0, home: -3, away: 1 }, // ungültig
+      { type: 'startKnockout' }, // gilt nicht als Ergebnis-Eingabe
+    ]);
+    expect(dropped.map((o) => o.type)).toEqual(['koResult', 'groupResult']);
+    expect(doc.matches[0].homeGoals).toBe(7);
+    expect(doc.phase).toBe('knockout');
+  });
+
+  it('applyOpsReport gibt dasselbe Dokument zurück, wenn nichts übernommen wurde', () => {
+    const group = played(fresh());
+    const { doc, dropped } = applyOpsReport(group, [{ type: 'koResult', id: 'sf1', home: 1, away: 0 }]);
+    expect(doc).toBe(group);
+    expect(dropped).toHaveLength(1);
+  });
+
+  it('Spieler umbenennen verlangt einen Namen', () => {
+    const d = fresh();
+    expect(applyOp(d, { type: 'renamePlayer', index: 0 })).toBe(d);
+    expect(applyOp(d, { type: 'renamePlayer', index: 0, name: '   ' })).toBe(d);
+    expect(applyOp(d, { type: 'renamePlayer', index: 0, name: ' Neu ' }).players[0].name).toBe('Neu');
+    expect(applyOp(d, { type: 'rename' })).toBe(d);
+  });
+
+  it('groupBy ersetzt Map.groupBy', () => {
+    const g = groupBy([1, 2, 3, 4, 5], (n) => n % 2);
+    expect([...g.get(1)]).toEqual([1, 3, 5]);
+    expect([...g.get(0)]).toEqual([2, 4]);
   });
 });

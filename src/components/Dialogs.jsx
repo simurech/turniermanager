@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dialog } from './ui.jsx';
-import { verifyPin } from '../lib/api.js';
+import { getPin, resetPin, verifyPin } from '../lib/api.js';
+import { copyText, tournamentUrl, whatsappUrl } from '../lib/format.js';
 import { setPin } from '../lib/auth.js';
 import { useApp } from '../context.jsx';
 
@@ -148,6 +149,60 @@ export function ResultSheet({ home, away, initial, knockout = false, onSave, onC
           Speichern
         </button>
       </div>
+    </Dialog>
+  );
+}
+
+/** Admin: zeigt den PIN eines Turniers an, zum Kopieren, Teilen oder Neusetzen. */
+export function PinInfoDialog({ id, name, onClose }) {
+  const [pin, setPin] = useState(undefined); // undefined = lädt, null = nicht gespeichert
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getPin(id)
+      .then((r) => alive && setPin(r.pin))
+      .catch((e) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  async function renew() {
+    setBusy(true);
+    try {
+      const r = await resetPin(id);
+      setPin(r.pin);
+      setError('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const message = pin ? `⚽ ${name}\nLive verfolgen: ${tournamentUrl(id)}\nPIN zum Eintragen: ${pin}` : '';
+  return (
+    <Dialog title="PIN des Turniers" onClose={onClose}>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>{name}</p>
+      {error && <p className="error" role="alert">{error}</p>}
+      {pin === undefined && !error && <p className="empty">Lädt …</p>}
+      {pin && <p className="pin-input" style={{ margin: '8px 0 14px' }}>{pin}</p>}
+      {pin === null && <p className="notice">Für dieses ältere Turnier ist kein PIN gespeichert. Setze einen neuen, er gilt sofort.</p>}
+      <div className="btn-row">
+        {pin && (
+          <>
+            <button type="button" className="btn alt" onClick={async () => setCopied(await copyText(pin))}>{copied ? 'Kopiert ✓' : 'PIN kopieren'}</button>
+            <a className="btn" href={whatsappUrl(message)} target="_blank" rel="noreferrer">An WhatsApp</a>
+          </>
+        )}
+        {pin !== undefined && (
+          <button type="button" className="btn alt" disabled={busy} onClick={renew}>{busy ? '…' : 'Neuen PIN setzen'}</button>
+        )}
+      </div>
+      <button type="button" className="btn" style={{ marginTop: 12 }} onClick={onClose}>Schliessen</button>
     </Dialog>
   );
 }

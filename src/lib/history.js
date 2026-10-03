@@ -14,10 +14,14 @@ async function loadCached(id) {
   return doc;
 }
 
-/** Gibt die Vorgänger zurück, nächster zuerst. Fehlende oder gelöschte Vorgänger beenden die Kette. */
+/**
+ * Gibt die Vorgänger zurück, nächster zuerst. Ein gelöschter Vorgänger (404) beendet die Kette.
+ * Bei anderen Fehlern (Netzwerk, Server) ist die Kette `incomplete` und wird später erneut geladen.
+ */
 export async function loadChain(previousId) {
   const docs = [];
   const seen = new Set();
+  let incomplete = false;
   let next = previousId;
   while (next && docs.length < MAX_CHAIN && !seen.has(next)) {
     seen.add(next);
@@ -25,27 +29,35 @@ export async function loadChain(previousId) {
       const doc = await loadCached(next);
       docs.push(doc);
       next = doc.previousId;
-    } catch {
+    } catch (e) {
+      incomplete = e.status !== 404;
       break;
     }
   }
-  return docs;
+  return { docs, incomplete };
 }
 
 export function useHistory(previousId) {
-  const [state, setState] = useState({ docs: [], loading: Boolean(previousId) });
+  const [state, setState] = useState({ docs: [], loading: Boolean(previousId), incomplete: false });
   useEffect(() => {
     let cancelled = false;
+    let timer;
     if (!previousId) {
-      setState({ docs: [], loading: false });
+      setState({ docs: [], loading: false, incomplete: false });
       return undefined;
     }
+    const attempt = (n) => {
+      loadChain(previousId).then(({ docs, incomplete }) => {
+        if (cancelled) return;
+        setState({ docs, loading: false, incomplete });
+        if (incomplete && n < 3) timer = setTimeout(() => attempt(n + 1), 8000);
+      });
+    };
     setState((s) => ({ ...s, loading: true }));
-    loadChain(previousId).then((docs) => {
-      if (!cancelled) setState({ docs, loading: false });
-    });
+    attempt(0);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [previousId]);
   return state;

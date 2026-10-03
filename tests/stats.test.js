@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDoc, applyOp, applyOps } from '../src/lib/tournament.js';
+import { createDoc, applyOp, applyOps, scheduleMatches } from '../src/lib/tournament.js';
 import {
   playerForm,
   streakLabel,
@@ -274,5 +274,67 @@ describe('Prozente, parallele Spiele und neutrale Quoten', () => {
     doc = applyOps(doc, doc.matches.slice(0, 6).map((m) => ({ type: 'groupResult', id: m.id, ...marcoWins(m) })));
     const seed = hashString('stand-a');
     expect(computeOdds(doc, [], 600, seededRandom(seed))).toEqual(computeOdds(doc, [], 600, seededRandom(seed)));
+  });
+});
+
+describe('Nahtloser Wechsel bei 2 Fernsehern', () => {
+  const players7 = () => createDoc({ name: 'T', players: players(7), config: { numTVs: 2 } });
+  const disjoint = (a, b) => ![a.homePlayer, a.awayPlayer].some((p) => p === b.homePlayer || p === b.awayPlayer);
+
+  it('bei 7 Spielern haben je drei aufeinanderfolgende Spiele keinen gemeinsamen Spieler', () => {
+    for (const dbl of [false, true]) {
+      const m = scheduleMatches(7, 2, dbl);
+      for (let i = 0; i + 1 < m.length; i++) {
+        expect(disjoint(m[i], m[i + 1])).toBe(true);
+        if (i + 2 < m.length) expect(disjoint(m[i], m[i + 2])).toBe(true);
+      }
+    }
+  });
+
+  it('bei 5 bis 8 Spielern überschneiden sich benachbarte Spiele nie', () => {
+    for (const n of [5, 6, 7, 8]) {
+      const m = scheduleMatches(n, 2, false);
+      for (let i = 0; i + 1 < m.length; i++) expect(disjoint(m[i], m[i + 1])).toBe(true);
+    }
+  });
+
+  it('ist ein Spiel fertig, rückt sofort das nächste nach (immer 2 aktiv, ohne Spielerüberschneidung)', () => {
+    let doc = players7();
+    const started = nextMatches(doc);
+    expect(started).toHaveLength(2);
+    // Das Spiel auf TV 1 wird zuerst fertig
+    const first = started.find((m) => m.tv === 1);
+    const other = started.find((m) => m.tv === 2);
+    doc = applyOp(doc, { type: 'groupResult', id: first.id, home: 1, away: 0 });
+    const now = nextMatches(doc);
+    expect(now).toHaveLength(2);
+    expect(now.map((m) => m.id)).toContain(other.id);
+    const fresh = now.find((m) => m.id !== other.id);
+    expect(disjoint(fresh, other)).toBe(true);
+    // Und wenn stattdessen das andere zuerst fertig wird
+    let doc2 = players7();
+    doc2 = applyOp(doc2, { type: 'groupResult', id: other.id, home: 0, away: 1 });
+    const now2 = nextMatches(doc2);
+    expect(now2).toHaveLength(2);
+    expect(disjoint(now2.find((m) => m.id !== first.id), first)).toBe(true);
+  });
+
+  it('bis zum Ende der Gruppenphase laufen immer zwei Spiele, danach bleibt nur der Rest', () => {
+    let doc = players7();
+    const seen = [];
+    for (let i = 0; i < 21; i++) {
+      const next = nextMatches(doc);
+      seen.push(next.length);
+      // Immer das erste der beiden Spiele wird fertig (andere Reihenfolgen sind ebenso erlaubt)
+      doc = applyOp(doc, { type: 'groupResult', id: next[0].id, home: i % 3, away: 0 });
+    }
+    expect(seen.slice(0, 19).every((n) => n === 2)).toBe(true);
+    expect(seen.slice(19)).toEqual([2, 1]);
+    expect(nextMatches(doc)).toHaveLength(0);
+  });
+
+  it('die gleichzeitig angezeigten Spiele sind nach TV geordnet', () => {
+    const next = nextMatches(players7());
+    expect(next.map((m) => m.tv)).toEqual([1, 2]);
   });
 });

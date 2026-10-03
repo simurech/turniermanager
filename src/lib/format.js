@@ -35,15 +35,18 @@ export async function copyText(text) {
   }
 }
 
-/** Teilt über das System-Menü, sonst Zwischenablage. Gibt 'shared' | 'copied' | 'failed' zurück. */
-export async function shareOrCopy({ title, text, url }) {
+/**
+ * Teilt über das System-Menü, sonst Zwischenablage. Gibt 'shared' | 'copied' | 'failed' zurück.
+ * Der Link steht bereits im Text. Er darf nicht zusätzlich als `url` übergeben werden, sonst erscheint er doppelt.
+ */
+export async function shareOrCopy({ title, text }) {
   if (navigator.share) {
     try {
-      await navigator.share({ title, text, url });
+      await navigator.share({ title, text });
       return 'shared';
     } catch (e) {
       if (e?.name === 'AbortError') return 'shared';
     }
   }
-  return (await copyText(url ? `${text}` : text)) ? 'copied' : 'failed';
+  return (await copyText(text)) ? 'copied' : 'failed';
 }

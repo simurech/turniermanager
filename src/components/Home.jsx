@@ -5,13 +5,13 @@ import { nextMatches } from '../lib/stats.js';
 import { PHASE_LABEL, dateOf, nameOf, photoUrl, yearOf } from '../lib/format.js';
 import { useApp } from '../context.jsx';
 import { Dialog, Section, Skeletons } from './ui.jsx';
-import { ConfirmDialog, PinDialog } from './Dialogs.jsx';
+import { ConfirmDialog, PinDialog, PinInfoDialog } from './Dialogs.jsx';
 import HallOfFame from './HallOfFame.jsx';
 
 function AdminTools({ row, onChanged }) {
   const { toast } = useApp();
   const [confirm, setConfirm] = useState(false);
-  const [pinInfo, setPinInfo] = useState(null);
+  const [pinOpen, setPinOpen] = useState(false);
   const run = async (fn, okMessage) => {
     try {
       const res = await fn();
@@ -28,8 +28,8 @@ function AdminTools({ row, onChanged }) {
       <button className="btn small alt" onClick={() => run(() => api.hideTournament(row.id, !row.hidden), row.hidden ? 'Wieder sichtbar' : 'Ausgeblendet')}>
         {row.hidden ? 'Einblenden' : 'Ausblenden'}
       </button>
-      <button className="btn small alt" onClick={async () => { const res = await run(() => api.resetPin(row.id)); if (res) setPinInfo(res.pin); }}>
-        Neuer PIN
+      <button className="btn small alt" onClick={() => setPinOpen(true)}>
+        PIN anzeigen
       </button>
       <button className="btn small danger" onClick={() => setConfirm(true)}>
         Löschen
@@ -44,22 +44,25 @@ function AdminTools({ row, onChanged }) {
           onClose={() => setConfirm(false)}
         />
       )}
-      {pinInfo && (
-        <Dialog title="Neuer PIN" onClose={() => setPinInfo(null)}>
-          <p className="pin-input" style={{ margin: '12px 0' }}>{pinInfo}</p>
-          <p className="muted small">Gilt sofort für „{row.name || row.id}“. Gib ihn an die Mitspieler weiter.</p>
-          <button className="btn" style={{ marginTop: 14 }} onClick={() => setPinInfo(null)}>OK</button>
-        </Dialog>
-      )}
+      {pinOpen && <PinInfoDialog id={row.id} name={row.name || row.id} onClose={() => setPinOpen(false)} />}
     </div>
   );
 }
 
 function ActiveCard({ row, admin, onChanged }) {
   const [doc, setDoc] = useState(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    const load = () => api.loadTournament(row.id).then((d) => alive && setDoc(d)).catch(() => {});
+    const load = () =>
+      api
+        .loadTournament(row.id)
+        .then((d) => {
+          if (!alive) return;
+          setDoc(d);
+          setFailed(false);
+        })
+        .catch(() => alive && setFailed(true));
     load();
     const t = setInterval(() => !document.hidden && load(), 10000);
     return () => {
@@ -85,7 +88,7 @@ function ActiveCard({ row, admin, onChanged }) {
             </div>
           ))
         ) : (
-          <p style={{ margin: '12px 0' }}>{doc ? 'Alle Spiele eingetragen' : 'Lädt …'}</p>
+          <p style={{ margin: '12px 0' }}>{doc ? 'Alle Spiele eingetragen' : failed ? 'Stand gerade nicht verfügbar' : 'Lädt …'}</p>
         )}
         {note && <p className="small" style={{ marginBottom: 10 }}>{note} · {row.playerCount} Spieler</p>}
         <button className="btn" onClick={() => navigate(`/t/${row.id}`)}>Turnier öffnen</button>
@@ -146,7 +149,7 @@ export default function Home() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all(archive.slice(0, 10).map((r) => api.loadTournament(r.id).catch(() => null))).then((docs) => alive && setFullDocs(docs.filter(Boolean)));
+    Promise.all(archive.slice(0, 40).map((r) => api.loadTournament(r.id).catch(() => null))).then((docs) => alive && setFullDocs(docs.filter(Boolean)));
     return () => {
       alive = false;
     };

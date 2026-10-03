@@ -247,3 +247,9 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .match .mid { display: grid; justify-items: center; gap: 4px; }
 .tvtag { font-family: var(--label); letter-spacing: 0.1em; font-size: 13px; background: var(--ink); color: var(--paper); padding: 0 8px; border-radius: 3px; }
 .tv .tbl .tr { align-items: center; }
+
+/* Touch-Flächen und Eingaben (iOS zoomt unter 16 px, kleine Flächen sind schwer zu treffen) */
+.check { width: 44px; height: 44px; }
+.input, select.input, .player-row .input { font-size: 16px; }
+.sync { min-height: 32px; font-family: inherit; }
+button.sync { cursor: pointer; }

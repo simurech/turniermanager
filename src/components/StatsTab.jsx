@@ -13,8 +13,10 @@ function Odds({ doc, history }) {
   );
   useEffect(() => {
     if (history.loading) return undefined;
-    const timer = setTimeout(() => setOdds(computeOdds(doc, history.docs, 3000, seededRandom(hashString(signature)))), 30);
-    return () => clearTimeout(timer);
+    // Die Simulation läuft, wenn das Handy gerade nichts anderes zu tun hat
+    const run = () => setOdds(computeOdds(doc, history.docs, 3000, seededRandom(hashString(signature))));
+    const handle = window.requestIdleCallback ? window.requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 50);
+    return () => (window.cancelIdleCallback ? window.cancelIdleCallback(handle) : clearTimeout(handle));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, history.loading]);
 
