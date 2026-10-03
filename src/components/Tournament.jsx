@@ -201,7 +201,7 @@ export default function Tournament({ id }) {
   };
 
   const share = async () => {
-    const r = await shareOrCopy({ title: doc.name, text: shareMessage(doc, meta) });
+    const r = await shareOrCopy({ text: shareMessage(doc, meta) });
     if (r === 'copied') toast('Link kopiert');
   };
 

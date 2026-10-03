@@ -23,7 +23,9 @@ export function shareMessage(doc, meta) {
     const loser = doc.players[doc.loser]?.name;
     return `🏆 ${doc.name || 'Turnier'}: ${doc.players[doc.winner].name} ist Turniersieger!${loser ? ` 🍋 ${loser} geht auf die Pressekonferenz.` : ''}\n${url}`;
   }
-  return `⚽ ${doc.name || 'Turnier'} – live verfolgen:\n${url}`;
+  const name = doc.name || 'Turnier';
+  const started = (doc.matches || []).some((m) => m.homeGoals != null);
+  return started ? `⚽ Live dabei beim ${name}:\n${url}` : `⚽ Es geht los! Verfolgt das ${name} live:\n${url}`;
 }
 
 export async function copyText(text) {
@@ -37,12 +39,13 @@ export async function copyText(text) {
 
 /**
  * Teilt über das System-Menü, sonst Zwischenablage. Gibt 'shared' | 'copied' | 'failed' zurück.
- * Der Link steht bereits im Text. Er darf nicht zusätzlich als `url` übergeben werden, sonst erscheint er doppelt.
+ * Es wird nur der Text geteilt. Titel und Link nicht zusätzlich übergeben, sonst hängen Apps wie WhatsApp
+ * alles aneinander und der Turniername oder der Link erscheinen doppelt.
  */
-export async function shareOrCopy({ title, text }) {
+export async function shareOrCopy({ text }) {
   if (navigator.share) {
     try {
-      await navigator.share({ title, text });
+      await navigator.share({ text });
       return 'shared';
     } catch (e) {
       if (e?.name === 'AbortError') return 'shared';
