@@ -496,3 +496,36 @@ describe('Turnier nachträglich bearbeiten (Admin): Namen, Marker, Regeln', () =
     expect(applyOp(started, { type: 'setConfig', tiebreaker: 'head2head' }).config.tiebreaker).toBe('head2head');
   });
 });
+
+describe('Rückrunde nachträglich ergänzen', () => {
+  for (const n of [4, 6, 7]) {
+    for (const tvs of [1, 2]) {
+      it(`${n} Spieler, ${tvs} TV: Ergebnisse bleiben, jede Paarung kommt umgekehrt dazu`, () => {
+        let doc = createDoc({ name: 'T', players: names(n), config: { numTVs: tvs, doubleRoundRobin: false } });
+        const half = doc.matches.length;
+        doc = applyOp(doc, { type: 'groupResult', id: 0, home: 3, away: 1 });
+        doc = applyOp(doc, { type: 'groupResult', id: 1, home: 2, away: 2 });
+        const next = applyOp(doc, { type: 'setConfig', doubleRoundRobin: true });
+        expect(next.config.doubleRoundRobin).toBe(true);
+        expect(next.matches).toHaveLength(half * 2);
+        expect(next.matches.slice(0, half)).toEqual(doc.matches);
+        expect(new Set(next.matches.map((m) => m.id)).size).toBe(half * 2);
+        const seen = new Set(next.matches.map((m) => `${m.homePlayer}-${m.awayPlayer}`));
+        expect(seen.size).toBe(half * 2);
+        // pro Runde kein Spieler doppelt
+        for (const list of groupBy(next.matches, (m) => m.round).values()) {
+          const ids = list.flatMap((m) => [m.homePlayer, m.awayPlayer]);
+          expect(new Set(ids).size).toBe(ids.length);
+        }
+        expect(applyOp(next, { type: 'setConfig', doubleRoundRobin: true })).toBe(next);
+      });
+    }
+  }
+
+  it('nur in der Gruppenphase', () => {
+    let doc = createDoc({ name: 'T', players: names(4), config: { numTVs: 1, doubleRoundRobin: false } });
+    doc.matches.forEach((m) => { doc = applyOp(doc, { type: 'groupResult', id: m.id, home: 1, away: 0 }); });
+    doc = applyOp(doc, { type: 'startKnockout' });
+    expect(applyOp(doc, { type: 'setConfig', doubleRoundRobin: true })).toBe(doc);
+  });
+});

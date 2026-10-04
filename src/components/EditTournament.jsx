@@ -29,6 +29,8 @@ export default function EditTournament({ doc, onSave, onClose }) {
 
   const finished = doc.phase === 'finished';
   const thirdEditable = doc.phase === 'group';
+  const [double, setDouble] = useState(Boolean(doc.config.doubleRoundRobin));
+  const doubleEditable = doc.phase === 'group' && !doc.config.doubleRoundRobin;
 
   const problems = useMemo(() => {
     const list = [];
@@ -55,6 +57,7 @@ export default function EditTournament({ doc, onSave, onClose }) {
     const config = {};
     if (!finished && tiebreaker !== doc.config.tiebreaker) config.tiebreaker = tiebreaker;
     if (thirdEditable && third !== Boolean(doc.config.thirdPlacePlayoff)) config.thirdPlacePlayoff = third;
+    if (doubleEditable && double) config.doubleRoundRobin = true;
     if (Object.keys(config).length) ops.push({ type: 'setConfig', ...config });
     onSave(ops);
   }
@@ -98,6 +101,13 @@ export default function EditTournament({ doc, onSave, onClose }) {
       <div className="field">
         <Switch checked={third} onChange={(v) => thirdEditable && setThird(v)}>Spiel um Platz 3</Switch>
         {!thirdEditable && <p className="muted small">Nur vor dem Start der K.O.-Runde änderbar.</p>}
+      </div>
+
+      <div className="field">
+        <Switch checked={double} onChange={(v) => doubleEditable && setDouble(v)}>Hin- und Rückrunde</Switch>
+        {doubleEditable
+          ? <p className="muted small">Hängt die Rückspiele an den Spielplan an. Bisherige Ergebnisse bleiben erhalten. Danach nicht mehr rückgängig zu machen.</p>
+          : <p className="muted small">{doc.config.doubleRoundRobin ? 'Die Rückrunde ist bereits im Spielplan.' : 'Nur in der Gruppenphase änderbar.'}</p>}
       </div>
 
       {problems.length > 0 && <div className="error" role="alert">{problems.map((p) => <div key={p}>{p}</div>)}</div>}

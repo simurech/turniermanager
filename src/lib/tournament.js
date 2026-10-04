@@ -307,6 +307,45 @@ export function scheduleMatches(numPlayers, numTVs = 1, doubleRoundRobin = false
   return best;
 }
 
+/**
+ * Hängt die Rückrunde an einen bestehenden Spielplan an (alle bisherigen Spiele und Ergebnisse bleiben unverändert).
+ * Die Rückspiele tauschen Heim und Auswärts und werden so geordnet, dass bei 2 Fernsehern nahtlos nachgerückt werden kann.
+ */
+export function addReturnLeg(doc) {
+  const first = [...doc.matches].sort((a, b) => a.id - b.id);
+  const pairs = first.map((m) => [m.awayPlayer, m.homePlayer]);
+  const numTVs = doc.config.numTVs === 2 ? 2 : 1;
+  const sequence = first.map((m) => [m.homePlayer, m.awayPlayer]);
+  const last = new Array(doc.players.length).fill(-5);
+  sequence.forEach(([h, a], i) => {
+    last[h] = i;
+    last[a] = i;
+  });
+  let order = pairs.map((_, i) => i);
+  if (numTVs === 2) {
+    for (const lookback of [2, 1, 0]) {
+      const result = orderLeg(pairs, last, sequence.slice(-2), sequence.length, lookback);
+      if (result) {
+        order = result.order;
+        break;
+      }
+    }
+  }
+  const added = order.map((idx, i) => {
+    const pos = first.length + i;
+    return {
+      id: first.length ? first[first.length - 1].id + 1 + i : i,
+      homePlayer: pairs[idx][0],
+      awayPlayer: pairs[idx][1],
+      homeGoals: null,
+      awayGoals: null,
+      tv: numTVs === 2 ? (pos % 2) + 1 : 1,
+      round: numTVs === 2 ? Math.floor(pos / 2) + 1 : pos + 1,
+    };
+  });
+  return { ...doc, config: { ...doc.config, doubleRoundRobin: true }, matches: [...doc.matches, ...added] };
+}
+
 // ------------------------------------------------------------------ Tabelle
 
 function blankRow(playerId) {
@@ -608,7 +647,7 @@ export function applyOp(doc, op) {
       return { ...doc, players };
     }
     case 'setConfig': {
-      // Regeln nachträglich ändern: Gleichstand bis zum Abschluss, Spiel um Platz 3 nur vor dem Start der K.O.-Runde
+      // Regeln nachträglich ändern: Gleichstand bis zum Abschluss, Spiel um Platz 3 und Rückrunde nur vor dem Start der K.O.-Runde
       const next = { ...doc.config };
       let changed = false;
       if (doc.phase !== 'finished' && (op.tiebreaker === 'goalDiff' || op.tiebreaker === 'head2head') && op.tiebreaker !== next.tiebreaker) {
@@ -619,7 +658,10 @@ export function applyOp(doc, op) {
         next.thirdPlacePlayoff = op.thirdPlacePlayoff;
         changed = true;
       }
-      return changed ? { ...doc, config: next } : doc;
+      let result = changed ? { ...doc, config: next } : doc;
+      // Rückrunde nachträglich ergänzen (nur in der Gruppenphase, nur einmal)
+      if (doc.phase === 'group' && op.doubleRoundRobin === true && !doc.config.doubleRoundRobin && doc.matches.length) result = addReturnLeg(result);
+      return result;
     }
     default:
       return doc;
