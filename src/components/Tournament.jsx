@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTournament } from '../lib/sync.js';
 import { useHistory } from '../lib/history.js';
 import { allGroupPlayed, deriveState, groupBy, isPlayed, resolveKnockout } from '../lib/tournament.js';
 import { headToHead, nextMatches, playerForm, tipText } from '../lib/stats.js';
-import { clearPin, getAdmin, getPin, takeJustCreated } from '../lib/auth.js';
+import { clearPin, dismissJustCreated, getAdmin, getPin, takeJustCreated } from '../lib/auth.js';
 import { PHASE_LABEL, copyText, nameOf, shareMessage, shareOrCopy, teamOf, tournamentUrl, whatsappUrl } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
 import { useApp } from '../context.jsx';
@@ -142,6 +142,18 @@ export default function Tournament({ id }) {
     }
   }, [doc]);
 
+  // Spiele-Tab: direkt zur aktuellen Runde springen, damit man nicht von Hand durch die gespielten Runden scrollen muss
+  const currentRound = (doc?.matches || []).filter((m) => !isPlayed(m)).reduce((min, m) => Math.min(min, m.round), Infinity);
+  const jumpToCurrent = useCallback((smooth = false) => {
+    document.querySelector('[data-current-round]')?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+  const ready = Boolean(doc);
+  useEffect(() => {
+    if (tab !== 'games' || gamesView !== 'group' || filter !== 'all' || !ready) return undefined;
+    const frame = requestAnimationFrame(() => jumpToCurrent());
+    return () => cancelAnimationFrame(frame);
+  }, [tab, gamesView, filter, ready, jumpToCurrent]);
+
   // Das PIN-Fenster öffnet sich nur beim Wechsel in den Zustand „PIN nötig“ und lässt sich danach schliessen
   const prevSync = useRef(sync.state);
   useEffect(() => {
@@ -249,7 +261,7 @@ export default function Tournament({ id }) {
         )}
       </div>
 
-      {justPin && <NewPinBanner pin={justPin} doc={doc} meta={meta} onClose={() => setJustPin(null)} />}
+      {justPin && <NewPinBanner pin={justPin} doc={doc} meta={meta} onClose={() => { dismissJustCreated(id); setJustPin(null); }} />}
 
       {tab === 'overview' && (
         <>
@@ -301,8 +313,9 @@ export default function Tournament({ id }) {
               <div style={{ marginTop: 12 }}>
                 <Segmented label="Filter" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'Alle' }, { value: 'open', label: 'Offen' }, { value: 'done', label: 'Gespielt' }]} />
               </div>
+              {filter === 'all' && Number.isFinite(currentRound) && <button type="button" className="link" style={{ marginTop: 8 }} onClick={() => jumpToCurrent(true)}>↓ Zur aktuellen Runde</button>}
               {[...rounds.entries()].map(([round, list]) => (
-                <section key={round}>
+                <section key={round} {...(round === currentRound ? { 'data-current-round': true } : {})}>
                   <div className="round"><span>RUNDE {round}</span><span>{list.length > 1 ? 'TV 1 + TV 2' : `TV ${list[0].tv}`}</span></div>
                   {list.map((m) => <MatchButton key={m.id} doc={doc} m={m} onClick={() => openGroup(m)} tvInfo={doc.config.numTVs > 1} />)}
                 </section>

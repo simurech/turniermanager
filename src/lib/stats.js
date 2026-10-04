@@ -120,26 +120,38 @@ function poissonPmf(lambda, max) {
   return p;
 }
 
-/** Wahrscheinlichkeiten und wahrscheinlichstes Resultat aus zwei Poisson-Verteilungen. */
+/**
+ * Wahrscheinlichkeiten aus zwei Poisson-Verteilungen. Das getippte Resultat passt zum wahrscheinlichsten Ausgang
+ * (Sieg, Remis, Niederlage) und liegt innerhalb dieses Ausgangs am nächsten bei den erwarteten Toren. Das einzelne
+ * wahrscheinlichste Resultat wäre zu tief und könnte den Wahrscheinlichkeiten widersprechen (2:2 bei 50 % Heimsieg).
+ */
 export function predictMatch(strength, home, away) {
   const [lh, la] = strength.expected(home, away);
-  const max = 10;
+  const max = 12;
   const ph = poissonPmf(lh, max);
   const pa = poissonPmf(la, max);
   let pHome = 0;
   let pDraw = 0;
   let pAway = 0;
-  let best = { p: -1, score: [0, 0] };
   for (let i = 0; i <= max; i++) {
     for (let j = 0; j <= max; j++) {
       const p = ph[i] * pa[j];
       if (i > j) pHome += p;
       else if (i === j) pDraw += p;
       else pAway += p;
-      if (p > best.p) best = { p, score: [i, j] };
     }
   }
   const total = pHome + pDraw + pAway;
+  const outcome = pHome >= pDraw && pHome >= pAway ? 1 : pAway >= pDraw ? -1 : 0;
+  let best = { d: Infinity, p: -1, score: [0, 0] };
+  for (let i = 0; i <= max; i++) {
+    for (let j = 0; j <= max; j++) {
+      if (Math.sign(i - j) !== outcome) continue;
+      const d = (i - lh) ** 2 + (j - la) ** 2;
+      const p = ph[i] * pa[j];
+      if (d < best.d - 1e-9 || (Math.abs(d - best.d) <= 1e-9 && p > best.p)) best = { d, p, score: [i, j] };
+    }
+  }
   return { pHome: pHome / total, pDraw: pDraw / total, pAway: pAway / total, score: best.score, expected: [lh, la] };
 }
 

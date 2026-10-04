@@ -84,3 +84,11 @@ export const takeJustCreated = (id) => {
     return memory.get(`tm:new:${id}`) ?? null;
   }
 };
+export const dismissJustCreated = (id) => {
+  memory.delete(`tm:new:${id}`);
+  try {
+    sessionStorage.removeItem(`tm:new:${id}`);
+  } catch {
+    /* nichts zu entfernen */
+  }
+};

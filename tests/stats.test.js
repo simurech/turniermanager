@@ -81,6 +81,18 @@ describe('Tipp', () => {
     expect(p.score[0]).toBeGreaterThan(p.score[1]);
   });
 
+  it('getipptes Resultat passt zum wahrscheinlichsten Ausgang und zu den erwarteten Toren', () => {
+    const doc = playGroup(fresh(), marcoWins);
+    for (const [a, b] of [['Marco', 'Simon'], ['Simon', 'Marco'], ['Marco', 'Marco']]) {
+      const p = predictMatch(buildStrength(doc, []), a, b);
+      const top = Math.max(p.pHome, p.pDraw, p.pAway);
+      const sign = Math.sign(p.score[0] - p.score[1]);
+      expect(sign === 1 ? p.pHome : sign === -1 ? p.pAway : p.pDraw).toBe(top);
+      expect(Math.abs(p.score[0] - p.expected[0])).toBeLessThanOrEqual(1.5);
+      expect(Math.abs(p.score[1] - p.expected[1])).toBeLessThanOrEqual(1.5);
+    }
+  });
+
   it('Vorjahresdaten fliessen ein, aber schwächer', () => {
     const prev = playGroup(fresh(), marcoWins);
     const none = predictMatch(buildStrength(fresh(), []), 'Marco', 'Simon').pHome;

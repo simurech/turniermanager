@@ -263,3 +263,5 @@ button.sync { cursor: pointer; }
 .tag.silver { background: #c9ced6; color: var(--ink); }
 .tbl .tr.second { background: #c9ced655; }
 .namerow { grid-template-columns: 1fr 44px 44px 44px; }
+
+[data-current-round] { scroll-margin-top: 12px; }
