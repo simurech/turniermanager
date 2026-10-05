@@ -7,6 +7,7 @@ import { clearPin, dismissJustCreated, getAdmin, getPin, takeJustCreated } from 
 import { PHASE_LABEL, copyText, nameOf, shareMessage, shareOrCopy, teamOf, tournamentUrl, whatsappUrl } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
 import { expiryText } from '../lib/exportFile.js';
+import { pageTitle, useConfig } from '../lib/config.js';
 import { useApp } from '../context.jsx';
 import { Dots, Marks, Section, Segmented, Skeletons } from './ui.jsx';
 import { ConfirmDialog, PinDialog, PinInfoDialog, ResultSheet } from './Dialogs.jsx';
@@ -114,6 +115,7 @@ function NewPinBanner({ pin, doc, meta, onClose }) {
 
 export default function Tournament({ id }) {
   const { admin, toast, logoutAdmin } = useApp();
+  const { guestHours } = useConfig();
   // Ein veralteter Admin-Code auf dem Gerät wird bei einer Ablehnung vergessen, damit er nichts blockiert
   const t = useTournament(id, { onAuthFail: () => { if (getAdmin()) logoutAdmin(); } });
   const { doc, meta, status, sync, pending, dispatch, retry, refresh, notice, clearNotice, connection } = t;
@@ -136,7 +138,7 @@ export default function Tournament({ id }) {
 
   useEffect(() => {
     if (!doc) return;
-    document.title = `${doc.name || 'Turnier'} · Turnier Manager`;
+    document.title = pageTitle(doc.name || 'Turnier');
     if (!initialTab.current) {
       initialTab.current = true;
       setGamesView(doc.phase === 'group' ? 'group' : 'ko');
@@ -178,7 +180,7 @@ export default function Tournament({ id }) {
         <div className="topbar">
           <button className="iconbtn" onClick={() => navigate('/')} aria-label="Zurück">←</button>
         </div>
-        <p className="error" role="alert">{status === 'notfound' ? `Das Turnier „${id}“ gibt es nicht (mehr). Turniere von Gästen werden nach 48 Stunden gelöscht.` : 'Das Turnier konnte nicht geladen werden.'}</p>
+        <p className="error" role="alert">{status === 'notfound' ? `Das Turnier „${id}“ gibt es nicht (mehr). ${guestHours ? `Turniere von Gästen werden nach ${guestHours} Stunden gelöscht.` : ''}` : 'Das Turnier konnte nicht geladen werden.'}</p>
         <button className="btn" onClick={() => (status === 'error' ? window.location.reload() : navigate('/'))}>{status === 'error' ? 'Neu laden' : 'Zur Startseite'}</button>
       </main>
     );

@@ -2,7 +2,7 @@
 // Aufruf: node --test tests/
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -423,4 +423,47 @@ test('laufende Turniere werden nie automatisch ausgeblendet', async () => {
   const d = JSON.parse(readFileSync(file, 'utf8')); d.updatedAt = new Date(Date.now() - 30 * 24 * 3600e3).toISOString(); writeFileSync(file, JSON.stringify(d));
   const list = (await call('list', { method: 'GET' })).json.tournaments;
   assert.ok(list.some((x) => x.id === t.id));
+});
+
+test('Einrichtungsskript: schreibt config.php, die API liefert die Werte, zweiter Lauf wird verweigert', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tm-setup-'));
+  const answers = ['super-geheimer-code-1', 'super-geheimer-code-1', 'Mein Turnier', '-', '#112233', '', '#fff', '', '', '24', '0', 'https://github.com/x/y', ''].join('\n') + '\n';
+  // Webroot-Dateien (Manifest, index.html) liegen in einem Temp-Ordner, nie im Repo
+  const web = mkdtempSync(join(tmpdir(), 'tm-web-'));
+  writeFileSync(join(web, 'site.webmanifest'), JSON.stringify({ name: 'Turnier Manager', theme_color: '#000000' }));
+  writeFileSync(join(web, 'index.html'), '<title>Turnier Manager</title><meta name="theme-color" content="#1d2b53"><meta property="og:title" content="Turnier Manager"><meta property="og:image" content="https://x.example/android-chrome-512x512.png">');
+  const run = (input) => spawnSync('php', [join(root, 'public', 'setup.php'), dir], { input, encoding: 'utf8', env: { ...process.env, TM_WEBROOT: web } });
+  const first = run(answers);
+  assert.equal(first.status, 0, first.stderr + first.stdout);
+  const cfg = execFileSync('php', ['-r', `echo json_encode(include '${dir}/config.php');`]).toString();
+  const c = JSON.parse(cfg);
+  assert.equal(c.appName, 'Mein Turnier');
+  assert.equal(c.subline, '');
+  assert.equal(c.colors.red, '#112233');
+  assert.equal(c.colors.ink, '#1d2b53');
+  assert.equal(c.colors.paper, '#ffffff');
+  assert.equal(c.guestHours, 24);
+  assert.equal(c.finishedHours, 0);
+  assert.ok(c.admin_hash.startsWith('$2y$'));
+  assert.equal(JSON.parse(readFileSync(join(web, 'site.webmanifest'), 'utf8')).name, 'Mein Turnier');
+  const html = readFileSync(join(web, 'index.html'), 'utf8');
+  assert.match(html, /<title>Mein Turnier<\/title>/);
+  assert.match(html, /theme-color" content="#1d2b53"/);
+  assert.equal(run(answers).status, 1, 'zweiter Lauf wird verweigert');
+  // Zu kurzer Code wird abgelehnt
+  const bad = spawnSync('php', [join(root, 'public', 'setup.php'), mkdtempSync(join(tmpdir(), 'tm-setup-'))], { input: 'kurz\nkurz\n\n\n\n\n\n\n\n\n\n\n\n', encoding: 'utf8' });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /12 Zeichen/);
+  rmSync(dir, { recursive: true, force: true });
+  rmSync(web, { recursive: true, force: true });
+});
+
+test('config-Aktion liefert Standardwerte, bei gültiger config.php die eigenen', async () => {
+  const res = await call('config', { method: 'GET' });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.appName, 'Turnier Manager');
+  assert.equal(res.json.guestHours, 48);
+  assert.equal(res.json.finishedHours, 12);
+  assert.equal(res.json.colors.red, '#c8372d');
+  assert.equal(res.json.repoUrl, '');
 });

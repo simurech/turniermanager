@@ -7,7 +7,7 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # Speicher und Konfiguration nie ausliefern (liegt normalerweise ausserhalb des Webroots)
 RedirectMatch 403 ^/(data|tm-private)(/|$)
-<FilesMatch "^(config|set-admin)\.php$">
+<FilesMatch "^config\.php$">
     Require all denied
 </FilesMatch>
 <FilesMatch "\.(md|log|marker)$">

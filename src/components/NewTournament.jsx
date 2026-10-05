@@ -5,6 +5,7 @@ import { navigate } from '../lib/router.js';
 import { DEFAULT_CONFIG, createDoc, deriveState } from '../lib/tournament.js';
 import { dateOf, yearOf } from '../lib/format.js';
 import { parseExport } from '../lib/exportFile.js';
+import { useConfig } from '../lib/config.js';
 import { useApp } from '../context.jsx';
 import { Section, Segmented, Switch } from './ui.jsx';
 
@@ -16,9 +17,14 @@ const blankRow = (over = {}) => ({ key: ++keyCounter, name: '', team: '', champi
 
 export default function NewTournament() {
   const { admin, toast } = useApp();
+  const { guestHours, repoUrl } = useConfig();
+  // Gäste importieren das Vorjahr per Datei. Laufen Gast-Turniere nie ab (0 Stunden), wählen sie es wie der Admin aus der Liste (mit PIN).
+  const fromFile = !admin && guestHours > 0;
+  const fromList = admin || guestHours === 0;
   const [name, setName] = useState(defaultName);
   const [finished, setFinished] = useState([]);
   const [previousId, setPreviousId] = useState('');
+  const [previousPin, setPreviousPin] = useState('');
   const [imported, setImported] = useState(null); // Gast: { name, chain } aus der Export-Datei
   const fileInput = useRef(null);
   const [rows, setRows] = useState(() => Array.from({ length: MIN_ROWS }, () => blankRow()));
@@ -30,7 +36,7 @@ export default function NewTournament() {
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     // Nur der Admin wählt Vorjahre aus der Liste. Gäste übernehmen sie über die Export-Datei.
-    if (!admin) {
+    if (fromFile) {
       setFinished([]);
       setPreviousId('');
       setListState('ok');
@@ -44,7 +50,7 @@ export default function NewTournament() {
         setListState('ok');
       })
       .catch(() => setListState('error'));
-  }, [admin, reloadKey]);
+  }, [fromFile, reloadKey]);
 
   // Spieler, Marker und Einstellungen eines früheren Turniers als Vorschlag übernehmen
   function fillFrom(prev) {
@@ -89,8 +95,9 @@ export default function NewTournament() {
     if (rows.some((r) => !r.name.trim())) list.push('Alle Spieler brauchen einen Namen.');
     const names = rows.map((r) => r.name.trim().toLowerCase()).filter(Boolean);
     if (new Set(names).size !== names.length) list.push('Namen müssen verschieden sein.');
+    if (previousId && !admin && !/^\d{4}$/.test(previousPin)) list.push('PIN des Vorgängers eingeben (4 Ziffern).');
     return list;
-  }, [rows]);
+  }, [rows, previousId, previousPin, admin]);
 
   const update = (key, patch) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   // Jeden Marker gibt es nur einmal, und ein Spieler trägt höchstens einen
@@ -117,7 +124,7 @@ export default function NewTournament() {
         ...(r.loserMark ? { loserMark: true } : {}),
       }));
       const doc = createDoc({ name: name.trim() || defaultName(), players, config });
-      const res = await api.createTournament({ data: doc, previousId: admin ? previousId : '', history: admin ? null : imported?.chain });
+      const res = await api.createTournament({ data: doc, previousId: fromList ? previousId : '', previousPin: admin ? '' : previousPin, history: fromFile ? imported?.chain : null });
       setPin(res.id, res.pin);
       rememberJustCreated(res.id, res.pin);
       navigate(`/t/${res.id}`);
@@ -148,13 +155,14 @@ export default function NewTournament() {
             <button type="button" className="link" onClick={() => setReloadKey((n) => n + 1)}>Erneut laden</button>
           </p>
         )}
-        {!admin && (
+        {fromFile && (
           <div className="notice">
             <strong>⏳ Gast-Turnier</strong>
-            <p style={{ margin: '4px 0 0' }}>Dein Turnier wird <strong>48 Stunden nach dem Start automatisch gelöscht</strong>. Nach dem Turnier kannst du die Ergebnisse als Datei exportieren und beim nächsten Mal wieder importieren.</p>
+            <p style={{ margin: '4px 0 0' }}>Dein Turnier wird <strong>{guestHours} Stunden nach dem Start automatisch gelöscht</strong>. Nach dem Turnier kannst du die Ergebnisse als Datei exportieren und beim nächsten Mal wieder importieren.</p>
+            {repoUrl && <p style={{ margin: '8px 0 0' }}>Du möchtest deine Turniere dauerhaft behalten? <a href={repoUrl} target="_blank" rel="noreferrer">Lade den Code herunter und hoste ihn selbst</a>, dann bist du Admin.</p>}
           </div>
         )}
-        {!admin && (
+        {fromFile && (
           <div className="field">
             <span className="label">Vorjahr importieren (optional)</span>
             <input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
@@ -168,7 +176,7 @@ export default function NewTournament() {
             </p>
           </div>
         )}
-        {admin && finished.length > 0 && (
+        {fromList && finished.length > 0 && (
           <div className="field">
             <label htmlFor="prev">Vorjahr als Basis (optional)</label>
             <select id="prev" className="input" value={previousId} onChange={(e) => { setPreviousId(e.target.value); setError(''); }}>
@@ -180,6 +188,13 @@ export default function NewTournament() {
             <p className="muted small" style={{ marginTop: 6 }}>Spieler und Einstellungen werden vorgeschlagen und lassen sich ändern. Das Vorjahr fliesst nur in Statistik und Quoten ein. Alle starten bei 0.</p>
           </div>
         )}
+        {previousId && !admin && (
+          <div className="field">
+            <label htmlFor="ppin">PIN des Vorgängers</label>
+            <input id="ppin" className="input pin-input" inputMode="numeric" maxLength={4} value={previousPin} onChange={(e) => setPreviousPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="····" />
+          </div>
+        )}
+
         <Section>Spieler ({rows.length})</Section>
         <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>Mindestens 4, höchstens 8 Spieler · 👑 amtierender Meister · 🥈 amtierender Zweiter · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
         {rows.map((r, i) => (
@@ -221,7 +236,7 @@ export default function NewTournament() {
             {[...problems, error].filter(Boolean).map((p) => <div key={p}>{p}</div>)}
           </div>
         )}
-        {!admin && <p className="notice">⏳ Gast-Turnier: wird nach 48 Stunden gelöscht. Exportiere die Ergebnisse nach dem Turnier.</p>}
+        {fromFile && <p className="notice">⏳ Gast-Turnier: wird nach {guestHours} Stunden gelöscht. Exportiere die Ergebnisse nach dem Turnier.</p>}
         <p className="notice">Nach dem Start bekommt das Turnier einen 4-stelligen PIN. Nur wer ihn kennt, darf Ergebnisse eintragen. Alle anderen können zuschauen.</p>
         <button className="btn" style={{ width: 'calc(100% - 4px)' }} disabled={busy || problems.length > 0 || listState !== 'ok'}>
           {busy ? 'Erstelle …' : 'Turnier starten'}

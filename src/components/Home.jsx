@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import * as api from '../lib/api.js';
 import { navigate } from '../lib/router.js';
 import { PHASE_LABEL, dateOf, photoUrl, yearOf } from '../lib/format.js';
+import { useConfig } from '../lib/config.js';
 import { useApp } from '../context.jsx';
 import { Dialog, Section, Skeletons } from './ui.jsx';
 import { ConfirmDialog, PinDialog, PinInfoDialog } from './Dialogs.jsx';
@@ -85,6 +86,7 @@ function ArchiveCard({ row, admin, onChanged }) {
 
 export default function Home() {
   const { admin, logoutAdmin } = useApp();
+  const { appName, subline } = useConfig();
   const [rows, setRows] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(`tm:list:${admin ? 'admin' : 'guest'}`) || 'null');
@@ -140,8 +142,8 @@ export default function Home() {
   return (
     <main className="app no-tabs">
       <header style={{ padding: 'calc(22px + env(safe-area-inset-top)) 0 4px' }}>
-        <h1 className="logo">Turnier<br />Manager</h1>
-        <p className="eyebrow" style={{ marginTop: 8 }}>★ WER IST DER FIFA GOTT? ★</p>
+        <h1 className="logo">{appName.includes(' ') ? <>{appName.slice(0, appName.indexOf(' '))}<br />{appName.slice(appName.indexOf(' ') + 1)}</> : appName}</h1>
+        {subline && <p className="eyebrow" style={{ marginTop: 8 }}>{subline}</p>}
       </header>
 
       {error && <p className="error" role="alert" style={{ marginTop: 14 }}>{error} <button className="link" onClick={load}>Erneut versuchen</button></p>}

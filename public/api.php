@@ -66,7 +66,7 @@ function env_limit(string $name, int $default): int
 /** Wie lange ein Turnier eines Gasts (ohne Admin-Code) erhalten bleibt (Sekunden). */
 function guest_seconds(): int
 {
-    return env_limit('TM_GUEST_HOURS', 48) * 3600;
+    return env_limit('TM_GUEST_HOURS', app_config()['guestHours']) * 3600;
 }
 
 /** Ob ein Gast-Turnier abgelaufen ist. Turniere des Admins haben kein Ablaufdatum. */
@@ -82,14 +82,14 @@ function is_expired(array $t): bool
 /** Wie lange ein abgeschlossenes Turnier für Gäste sichtbar bleibt (Sekunden). */
 function finished_visible_seconds(): int
 {
-    return env_limit('TM_FINISHED_HOURS', 12) * 3600;
+    return env_limit('TM_FINISHED_HOURS', app_config()['finishedHours']) * 3600;
 }
 
 /** Zeitpunkt, bis zu dem ein abgeschlossenes Turnier für Gäste sichtbar ist, sonst null (unbegrenzt oder nicht abgeschlossen). */
 function visible_until(array $t): ?int
 {
-    if (($t['phase'] ?? '') !== 'finished' || !empty($t['pinned'])) {
-        return null;
+    if (($t['phase'] ?? '') !== 'finished' || !empty($t['pinned']) || finished_visible_seconds() === 0) {
+        return null; // 0 Stunden = nie ausblenden
     }
     $since = strtotime((string) ($t['finishedAt'] ?? $t['updatedAt'] ?? ''));
     return $since === false ? null : $since + finished_visible_seconds();
@@ -373,6 +373,39 @@ function admin_hash(): ?string
     }
     $config = include $file;
     return is_array($config) && is_string($config['admin_hash'] ?? null) ? $config['admin_hash'] : null;
+}
+
+const DEFAULT_COLORS = ['paper' => '#f2e8cf', 'ink' => '#1d2b53', 'red' => '#c8372d', 'green' => '#2f6b3a', 'mustard' => '#e8a921'];
+
+/**
+ * Einstellungen aus config.php (vom Einrichtungsskript geschrieben) mit Standardwerten. Fehlt ein Wert oder ist er ungültig,
+ * gilt der Standard. So läuft die App auch mit einer alten config.php, die nur den Admin-Hash enthält.
+ */
+function app_config(): array
+{
+    static $cfg = null;
+    if ($cfg !== null) {
+        return $cfg;
+    }
+    $file = storage_dir() . '/config.php';
+    $raw = is_file($file) ? include $file : [];
+    $raw = is_array($raw) ? $raw : [];
+    $text = static fn(mixed $v, string $default, int $max): string => is_string($v) && trim($v) !== '' && mb_strlen($v) <= $max ? trim($v) : $default;
+    $hours = static fn(mixed $v, int $default): int => is_int($v) && $v >= 0 && $v <= 24 * 365 ? $v : $default;
+    $colors = [];
+    foreach (DEFAULT_COLORS as $name => $default) {
+        $v = $raw['colors'][$name] ?? null;
+        $colors[$name] = is_string($v) && preg_match('/\A#[0-9a-fA-F]{6}\z/', $v) === 1 ? strtolower($v) : $default;
+    }
+    $repo = $raw['repoUrl'] ?? '';
+    return $cfg = [
+        'appName' => $text($raw['appName'] ?? null, 'Turnier Manager', 40),
+        'subline' => is_string($raw['subline'] ?? null) && mb_strlen($raw['subline']) <= 60 ? trim($raw['subline']) : '★ WER IST DER FIFA GOTT? ★',
+        'colors' => $colors,
+        'guestHours' => $hours($raw['guestHours'] ?? null, 48),
+        'finishedHours' => $hours($raw['finishedHours'] ?? null, 12),
+        'repoUrl' => is_string($repo) && preg_match('#\Ahttps://[^\s<>"\']{3,200}\z#', $repo) === 1 ? $repo : '',
+    ];
 }
 
 function verify_pin(array $t, string $pin): bool
@@ -705,6 +738,15 @@ function action_list(): never
     respond(['tournaments' => $rows, 'isAdmin' => $isAdmin]);
 }
 
+/** Öffentlich: Name, Untertitel, Farben und Fristen dieser Installation. */
+function action_config(): never
+{
+    $c = app_config();
+    $c['guestHours'] = intdiv(guest_seconds(), 3600);
+    $c['finishedHours'] = intdiv(finished_visible_seconds(), 3600);
+    respond($c);
+}
+
 function action_load(): never
 {
     $id = $_GET['id'] ?? '';
@@ -744,11 +786,21 @@ function action_create(): never
 
     $previousId = $body['previousId'] ?? null;
     if ($previousId !== null) {
-        if (!$isAdmin) {
+        // Gäste übernehmen ein früheres Turnier nur über die Export-Datei. Läuft nichts ab (Fristen aus), gilt wie früher der PIN des Vorgängers.
+        if (!$isAdmin && guest_seconds() > 0) {
             fail(403, 'Als Gast kann ein früheres Turnier nur über die Export-Datei übernommen werden.');
         }
-        if (!valid_id($previousId) || read_tournament($previousId) === null) {
+        if (!valid_id($previousId) || ($previous = read_tournament($previousId)) === null) {
             fail(404, 'Vorgänger-Turnier nicht gefunden');
+        }
+        if (!$isAdmin) {
+            $previousPin = $body['previousPin'] ?? null;
+            if (!is_string($previousPin) || $previousPin === '') {
+                fail(401, 'PIN des Vorgängers erforderlich');
+            }
+            if (!check_pin($previous, $previousPin)) {
+                fail(403, 'Falscher PIN des Vorgängers');
+            }
         }
     }
     $history = clean_history($body['history'] ?? null);
@@ -763,7 +815,7 @@ function action_create(): never
 
     purge_expired();
     $pin = generate_pin();
-    $expiresAt = $isAdmin ? null : date('c', time() + guest_seconds());
+    $expiresAt = $isAdmin || guest_seconds() === 0 ? null : date('c', time() + guest_seconds());
     $doc = with_lock(static function () use ($data, $previousId, $pin, $history, $expiresAt): array {
         $now = date('c');
         $doc = $data + ['phase' => 'setup'];
@@ -967,6 +1019,7 @@ if ($method === 'GET') {
     match ($action) {
         'list' => action_list(),
         'load' => action_load(),
+        'config' => action_config(),
         default => fail(400, 'Unbekannte Aktion'),
     };
 }

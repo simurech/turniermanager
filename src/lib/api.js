@@ -40,8 +40,8 @@ export const listTournaments = () => request('list', { method: 'GET' });
 // Leere Objekte kommen vom Server als leere Liste zurück. Die App erwartet für `config` ein Objekt.
 const normalize = (doc) => (Array.isArray(doc?.config) ? { ...doc, config: {} } : doc);
 export const loadTournament = (id) => request('load', { method: 'GET', query: { id }, auth: false }).then(normalize);
-export const createTournament = ({ data, previousId, history }) =>
-  request('create', { body: { data: pickData(data), previousId: previousId || null, history: history?.length ? history : null } });
+export const createTournament = ({ data, previousId, previousPin, history }) =>
+  request('create', { body: { data: pickData(data), previousId: previousId || null, previousPin: previousPin || null, history: history?.length ? history : null } });
 export const updateTournament = (id, version, data) => request('update', { id, body: { id, version, data: pickData(data) } });
 export const verifyPin = (id, pin) => request('verify', { method: 'POST', query: { id }, auth: false, headers: { 'X-Pin': pin } });
 export const verifyAdmin = (code) => request('admin_check', { auth: false, headers: { 'X-Admin': code } });

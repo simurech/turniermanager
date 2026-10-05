@@ -12,6 +12,7 @@
   --green: #2f6b3a;
   --mustard: #e8a921;
   --muted: #5d6685;
+  --page: #cdbf9a;
   --shadow: 4px 4px 0 var(--ink);
   --display: 'Alfa Slab One', Georgia, serif;
   --label: 'Bebas Neue', Impact, sans-serif;
@@ -20,7 +21,7 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-html { background: #cdbf9a; }
+html { background: var(--page); }
 body {
   font-family: var(--body);
   color: var(--ink);
@@ -82,7 +83,7 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .banner .btn { margin-top: 4px; }
 .banner.calm { background: var(--green); }
 
-.sticker { width: 56px; height: 68px; background: linear-gradient(135deg, var(--mustard), #f6d36b); border: 2.5px solid var(--ink); display: grid; place-items: center; font-size: 26px; border-radius: 4px; position: relative; flex: none; overflow: hidden; }
+.sticker { width: 56px; height: 68px; background: linear-gradient(135deg, var(--mustard), color-mix(in srgb, var(--mustard) 60%, #fff)); border: 2.5px solid var(--ink); display: grid; place-items: center; font-size: 26px; border-radius: 4px; position: relative; flex: none; overflow: hidden; }
 .sticker::after { content: ''; position: absolute; inset: 3px; border: 1px dashed var(--ink); border-radius: 2px; pointer-events: none; }
 .sticker img { width: 100%; height: 100%; object-fit: cover; }
 .year { font-family: var(--label); font-size: 26px; line-height: 1; color: var(--red); }
@@ -91,14 +92,14 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .tbl { background: var(--card); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); margin: 0 5px 12px 0; overflow: hidden; }
 .tbl .th, .tbl .tr { display: grid; grid-template-columns: 26px 1fr 26px 40px 38px; gap: 6px; align-items: center; padding: 10px 12px; }
 .tbl .th { background: var(--ink); color: var(--paper); font-family: var(--label); letter-spacing: 0.1em; font-size: 15px; }
-.tbl .tr { border-bottom: 1.5px dashed #1d2b5360; font-size: 15px; }
+.tbl .tr { border-bottom: 1.5px dashed color-mix(in srgb, var(--ink) 38%, transparent); font-size: 15px; }
 .tbl .tr:last-child { border-bottom: 0; }
 .tbl .rank { font-family: var(--display); color: var(--red); }
 .tbl .pts { font-family: var(--display); font-size: 18px; text-align: right; }
 .tbl .who { font-weight: 700; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .tbl .who small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
-.tbl .tr.champ { background: #e8a92133; }
-.tbl .tr.lastrow { background: #c8372d22; }
+.tbl .tr.champ { background: color-mix(in srgb, var(--mustard) 20%, transparent); }
+.tbl .tr.lastrow { background: color-mix(in srgb, var(--red) 13%, transparent); }
 .tbl .tr.qual .rank::after { content: '•'; color: var(--green); margin-left: 2px; }
 
 .tag { font-family: var(--label); letter-spacing: 0.06em; font-size: 12px; padding: 1px 6px; border: 1.5px solid var(--ink); border-radius: 3px; margin-left: 4px; background: var(--mustard); white-space: nowrap; vertical-align: middle; }
@@ -118,7 +119,7 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .match .side.away { text-align: right; }
 .match .score { font-family: var(--display); font-size: 22px; min-width: 76px; text-align: center; }
 .match .score.open { font-family: var(--label); font-size: 17px; letter-spacing: 0.1em; color: var(--muted); background: var(--paper2); padding: 6px 10px; border-radius: 4px; }
-.match.done { background: #eef0e0; }
+.match.done { background: color-mix(in srgb, var(--green) 8%, var(--card)); }
 .match.locked { opacity: 0.6; }
 .match .win { text-decoration: underline wavy var(--green) 2px; text-underline-offset: 4px; }
 .match.stale { border-color: var(--red); }
@@ -139,7 +140,7 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .switch .box::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: var(--ink); border-radius: 50%; transition: transform 0.15s; }
 .switch[aria-checked='true'] .box { background: var(--green); }
 .switch[aria-checked='true'] .box::after { transform: translateX(22px); background: var(--paper); }
-.error { background: #c8372d22; border: 2px solid var(--red); border-radius: 6px; padding: 10px 12px; margin: 0 4px 12px 0; font-size: 14px; }
+.error { background: color-mix(in srgb, var(--red) 13%, transparent); border: 2px solid var(--red); border-radius: 6px; padding: 10px 12px; margin: 0 4px 12px 0; font-size: 14px; }
 .notice { background: var(--paper2); border: 2px dashed var(--ink); border-radius: 6px; padding: 10px 12px; margin: 0 4px 12px 0; font-size: 14px; }
 
 .player-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; margin: 0 4px 12px 0; padding: 10px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--ink); }
@@ -153,7 +154,7 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .mark.lose[aria-pressed='true'] { background: var(--red); color: var(--paper); }
 
 /* Dialoge */
-.backdrop { position: fixed; inset: 0; background: #1d2b5399; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
 .backdrop.mid { align-items: center; padding: 16px; }
 .sheet { width: 100%; max-width: 520px; background: var(--paper); border: 3px solid var(--ink); border-bottom: 0; border-radius: 16px 16px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); max-height: 92dvh; overflow: auto; }
 .dialog { width: 100%; max-width: 420px; background: var(--paper); border: 3px solid var(--ink); border-radius: 8px; box-shadow: 6px 6px 0 var(--ink); padding: 18px 16px; }
@@ -198,18 +199,18 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 /* Statistik */
 .odds { width: calc(100% - 5px); border-collapse: collapse; background: var(--card); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); margin-bottom: 12px; }
 .odds th { background: var(--ink); color: var(--paper); font-family: var(--label); letter-spacing: 0.1em; font-weight: 400; text-align: left; padding: 8px 10px; font-size: 15px; }
-.odds td { padding: 10px; border-bottom: 1.5px dashed #1d2b5360; }
+.odds td { padding: 10px; border-bottom: 1.5px dashed color-mix(in srgb, var(--ink) 38%, transparent); }
 .odds td.q, .odds th.q { text-align: right; font-family: var(--display); }
 .odds tr:last-child td { border-bottom: 0; }
 .tip { background: var(--mustard); border: 2.5px solid var(--ink); box-shadow: var(--shadow); padding: 12px; margin: 0 4px 12px 0; border-radius: 6px; }
 .tip .big { font-family: var(--display); font-size: 26px; }
 .bars { display: grid; grid-template-columns: var(--a) var(--d) var(--b); height: 14px; border: 2px solid var(--ink); margin: 8px 0 4px; }
 .bars span:nth-child(1) { background: var(--green); } .bars span:nth-child(2) { background: var(--paper2); } .bars span:nth-child(3) { background: var(--red); }
-.formrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1.5px dashed #1d2b5360; }
+.formrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1.5px dashed color-mix(in srgb, var(--ink) 38%, transparent); }
 .hof { width: calc(100% - 5px); border-collapse: collapse; background: var(--card); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); font-size: 14px; }
 .hof th { background: var(--ink); color: var(--paper); font-family: var(--label); font-weight: 400; letter-spacing: 0.06em; padding: 8px 6px; font-size: 14px; text-align: right; }
 .hof th:first-child, .hof td:first-child { text-align: left; padding-left: 10px; }
-.hof td { padding: 8px 6px; text-align: right; border-bottom: 1.5px dashed #1d2b5360; }
+.hof td { padding: 8px 6px; text-align: right; border-bottom: 1.5px dashed color-mix(in srgb, var(--ink) 38%, transparent); }
 .hof tr:last-child td { border-bottom: 0; }
 
 .skeleton { background: linear-gradient(90deg, var(--paper2), var(--card), var(--paper2)); background-size: 200% 100%; animation: shimmer 1.2s infinite; height: 72px; border: 2.5px solid var(--ink); border-radius: 6px; margin: 0 4px 12px 0; }
