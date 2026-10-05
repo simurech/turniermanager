@@ -35,7 +35,7 @@ describe('Spielplan', () => {
             }
           }
           // Pro Runde max. `tvs` Spiele und kein Spieler doppelt
-          const rounds = Map.groupBy(m, (x) => x.round);
+          const rounds = groupBy(m, (x) => x.round);
           for (const list of rounds.values()) {
             expect(list.length).toBeLessThanOrEqual(tvs);
             const ids = list.flatMap((x) => [x.homePlayer, x.awayPlayer]);
@@ -50,7 +50,7 @@ describe('Spielplan', () => {
 
   it('mit 4 Spielern und 2 TVs spielen alle in jeder Runde', () => {
     const m = scheduleMatches(4, 2, false);
-    expect(Map.groupBy(m, (x) => x.round).size).toBe(3);
+    expect(groupBy(m, (x) => x.round).size).toBe(3);
   });
 
   it('Heim- und Auswärtsspiele sind gleichmässig verteilt', () => {
@@ -84,7 +84,7 @@ describe('Spielplan', () => {
   });
 
   it('jedes Zeitfenster belegt beide Fernseher mit verschiedenen Nummern', () => {
-    const rounds = Map.groupBy(scheduleMatches(7, 2, false), (x) => x.round);
+    const rounds = groupBy(scheduleMatches(7, 2, false), (x) => x.round);
     for (const list of rounds.values()) expect(new Set(list.map((x) => x.tv)).size).toBe(list.length);
   });
 });
