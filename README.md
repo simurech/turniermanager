@@ -27,7 +27,7 @@ Wer seine Turniere dauerhaft behalten will, hostet die App selbst und ist dann A
 
 1. **Bauen:**
    ```bash
-   git clone <dieses-repo> && cd <repo>
+   git clone https://github.com/simurech/turniermanager.git && cd turniermanager
    npm ci
    npm run build        # erzeugt dist/
    ```
@@ -104,7 +104,7 @@ npm run test:unit   # nur die Unit-Tests
 | `public/api.php` | API: `config`, `list`, `load`, `create`, `update`, `verify`, `photo`, Admin-Aktionen |
 | `public/setup.php` | Einrichtung (Terminal oder Browser), sperrt sich nach der Einrichtung |
 | `public/sw.js`, `public/site.webmanifest` | Offline-Hülle und App-Installation |
-| `design-mockups/` | Die beiden Design-Entwürfe, `legacy-index.html` ist die alte App |
+| `design-mockups/` | Die beiden Design-Entwürfe (Retro und Stadion) |
 
 ## Spielregeln im Code
 
@@ -131,11 +131,6 @@ Der Admin sieht auf der Turnierseite „✏️ Bearbeiten“. Dort lassen sich T
 - Der Speicher liegt ausserhalb des Webroots (`../tm-private`). Ist das nicht möglich, liegt er in `public/data` mit Zugriffssperre.
 - Fotos werden serverseitig neu als JPEG kodiert (max. 1200 px). Dabei fallen EXIF-Daten wie der Standort weg.
 
-## Deployment der Live-Seite (Hostinger)
+## Lizenz
 
-Für die Live-Seite gilt der Ablauf unter „Selbst hosten“ mit diesen Ergänzungen:
-
-1. `npm run build`, dann den Inhalt von `dist/` (ohne `setup.php` und ohne `photos/`) in `~/domains/turniermanager.urech.dev/public_html/` kopieren. **Speicher (`tm-private/`) und `photos/*.jpg` nie überschreiben oder löschen.**
-2. Prüfen: Startseite öffnen, als Gast ein Test-Turnier anlegen (Ablaufhinweis sichtbar?), mit dem Admin-Code ein Turnier anlegen, danach beide wieder löschen.
-3. Beim Service Worker (`public/sw.js`) bei jeder Änderung der Hülle die Version `CACHE` erhöhen.
-4. Vor jedem Deployment ein Backup anlegen (`cp -r public_html public_html_backup_DATUM`).
+[MIT](LICENSE). Du darfst den Code frei nutzen, ändern und selbst hosten.

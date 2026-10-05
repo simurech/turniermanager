@@ -2,6 +2,14 @@
   "name": "turniermanager",
   "private": true,
   "version": "2.0.0",
+  "description": "Webapp für das jährliche Fussball-Turnier: Spielplan, Tabelle, K.O.-Runde, Statistik und Computer-Tipps. React + PHP, ohne Datenbank.",
+  "license": "MIT",
+  "author": "Simon Urech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simurech/turniermanager.git"
+  },
+  "homepage": "https://turniermanager.urech.dev",
   "type": "module",
   "scripts": {
     "dev": "vite",
