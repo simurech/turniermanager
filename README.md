@@ -23,15 +23,15 @@ Wer seine Turniere dauerhaft behalten will, hostet die App selbst und ist dann A
 
 ## Selbst hosten
 
-**Voraussetzungen:** Webhosting mit **PHP 8.1 oder neuer** (Apache mit `mod_rewrite`, z. B. jedes normale Shared Hosting), eine eigene (Sub-)Domain mit HTTPS. Zum Bauen einmalig **Node.js 18+** auf deinem Rechner. Ein Betrieb in einem Unterordner (`example.ch/turnier/`) wird nicht unterstützt.
+**Voraussetzungen:** Webhosting mit **PHP 8.1 oder neuer** (mit `gd`-Erweiterung, Apache mit `mod_rewrite`, z. B. jedes normale Shared Hosting) und eine eigene (Sub-)Domain mit HTTPS. Ein Betrieb in einem Unterordner (`example.ch/turnier/`) wird nicht unterstützt.
 
-1. **Bauen:**
+1. **Fertige Version holen.** Am einfachsten ohne Node.js: auf der Seite [Releases](https://github.com/simurech/turniermanager/releases) das ZIP der neuesten Version herunterladen und entpacken. Oder selbst bauen (einmalig **Node.js 18+** auf deinem Rechner):
    ```bash
    git clone https://github.com/simurech/turniermanager.git && cd turniermanager
    npm ci
    npm run build        # erzeugt dist/
    ```
-2. **Hochladen:** den **Inhalt** von `dist/` in den Webroot der (Sub-)Domain kopieren (inklusive der versteckten Datei `.htaccess`).
+2. **Hochladen:** den **Inhalt** des ZIPs bzw. von `dist/` in den Webroot der (Sub-)Domain kopieren (inklusive der versteckten Datei `.htaccess`).
 3. **Einrichten** (einmalig). Entweder im Terminal auf dem Server (empfohlen):
    ```bash
    cd /pfad/zum/webroot
@@ -73,6 +73,14 @@ Fehlt ein Wert oder ist er ungültig, gilt der Standardwert. Den Namen im Browse
 ### Aktualisieren
 
 Neue Version bauen und den Inhalt von `dist/` erneut hochladen. **Den Speicherordner (`tm-private/`) und `photos/*.jpg` nie überschreiben oder löschen**, dort liegen alle Turniere und die Einstellungen. Name und Farben der App stammen aus `config.php` und bleiben deshalb erhalten. Nur `index.html` und `site.webmanifest` werden überschrieben und zeigen danach wieder den Standardnamen im Seitentitel und bei der Installation auf dem Handy. Trage dort den Namen von Hand wieder ein oder führe `php setup.php /pfad/zum/speicher` nach dem Löschen von `config.php` erneut aus. Vor jedem Update ein Backup des Webroots und des Speicherordners anlegen.
+
+## Neue Version veröffentlichen
+
+Ein Tag wie `v2.1.0` auf `main` löst die GitHub Action aus (`.github/workflows/release.yml`). Sie führt die Tests aus, baut die App und hängt das fertige ZIP an die Veröffentlichung. Bei jedem Push läuft ausserdem `ci.yml` mit Tests und Build.
+
+```bash
+git tag v2.1.0 && git push origin v2.1.0
+```
 
 ## Entwicklung
 

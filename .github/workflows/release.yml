@@ -1,0 +1,41 @@
+name: Release
+
+# Ein Tag wie v2.1.0 baut die App und hängt ein fertiges ZIP an die Veröffentlichung.
+# Das ZIP enthält den Inhalt von dist/ und lässt sich direkt in den Webroot hochladen (ohne Node.js).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: gd
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: ZIP packen
+        run: |
+          cd dist
+          zip -r "../turniermanager-${GITHUB_REF_NAME}.zip" . -x 'photos/*.jpg'
+      - name: Veröffentlichung erstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          **Fertige Version zum Hochladen, ohne Node.js.** ZIP entpacken, den Inhalt in den Webroot deiner (Sub-)Domain kopieren (inklusive der versteckten Datei `.htaccess`) und danach `setup.php` aufrufen. Die ganze Anleitung steht in der [README](https://github.com/simurech/turniermanager#selbst-hosten).
+
+          Bei einem Update den Speicherordner `tm-private/` und `photos/*.jpg` nie überschreiben.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" "turniermanager-${GITHUB_REF_NAME}.zip" --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes
