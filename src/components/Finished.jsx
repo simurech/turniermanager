@@ -69,7 +69,7 @@ export default function Finished({ doc, meta, derived, history = [], canEdit, re
         </div>
       ))}
 
-      {meta.expiresAt && (
+      {meta.expiresAt && canEdit && (
         <div className="notice export">
           <strong>💾 Ergebnisse sichern</strong>
           <p style={{ margin: '6px 0 10px' }}>

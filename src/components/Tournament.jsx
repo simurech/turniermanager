@@ -264,7 +264,7 @@ export default function Tournament({ id }) {
         )}
       </div>
 
-      {meta.expiresAt && !finished && <p className="notice" role="status">⏳ Dieses Turnier wird am <strong>{expiryText(meta.expiresAt)}</strong> automatisch gelöscht. Nach dem Turnier kannst du die Ergebnisse exportieren.</p>}
+      {meta.expiresAt && canEdit && !finished && <p className="notice" role="status">⏳ Dieses Turnier wird am <strong>{expiryText(meta.expiresAt)}</strong> automatisch gelöscht. Nach dem Turnier kannst du die Ergebnisse exportieren.</p>}
       {justPin && <NewPinBanner pin={justPin} doc={doc} meta={meta} onClose={() => { dismissJustCreated(id); setJustPin(null); }} />}
 
       {tab === 'overview' && (
