@@ -7,10 +7,11 @@ import { dateOf, yearOf } from '../lib/format.js';
 import { useApp } from '../context.jsx';
 import { Section, Segmented, Switch } from './ui.jsx';
 
-const MAX_ROWS = 10;
+const MIN_ROWS = 4;
+const MAX_ROWS = 8;
 const defaultName = () => `Turnier ${dateOf(new Date().toISOString())}`;
 let keyCounter = 0;
-const blankRow = (over = {}) => ({ key: ++keyCounter, name: '', team: '', selected: true, champion: false, runnerUp: false, loserMark: false, ...over });
+const blankRow = (over = {}) => ({ key: ++keyCounter, name: '', team: '', champion: false, runnerUp: false, loserMark: false, ...over });
 
 export default function NewTournament() {
   const { admin, toast } = useApp();
@@ -18,7 +19,7 @@ export default function NewTournament() {
   const [finished, setFinished] = useState([]);
   const [previousId, setPreviousId] = useState('');
   const [previousPin, setPreviousPin] = useState('');
-  const [rows, setRows] = useState(() => Array.from({ length: 7 }, () => blankRow()));
+  const [rows, setRows] = useState(() => Array.from({ length: MIN_ROWS }, () => blankRow()));
   const [config, setConfig] = useState({ ...DEFAULT_CONFIG });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -45,7 +46,7 @@ export default function NewTournament() {
       .then((prev) => {
         if (!alive) return;
         const second = deriveState(prev).ranking?.[1];
-        setRows(prev.players.map((p, i) => blankRow({ name: p.name, champion: i === prev.winner, runnerUp: i === second, loserMark: i === prev.loser })));
+        setRows(prev.players.slice(0, MAX_ROWS).map((p, i) => blankRow({ name: p.name, champion: i === prev.winner, runnerUp: i === second, loserMark: i === prev.loser })));
         setConfig((c) => ({ ...c, numTVs: prev.config.numTVs ?? c.numTVs, doubleRoundRobin: Boolean(prev.config.doubleRoundRobin), tiebreaker: prev.config.tiebreaker ?? c.tiebreaker, thirdPlacePlayoff: prev.config.thirdPlacePlayoff ?? c.thirdPlacePlayoff }));
       })
       .catch((e) => setError(e.message));
@@ -54,17 +55,14 @@ export default function NewTournament() {
     };
   }, [previousId]);
 
-  const selected = rows.filter((r) => r.selected);
   const problems = useMemo(() => {
     const list = [];
-    if (selected.length < 4) list.push('Mindestens 4 Spieler auswählen.');
-    if (selected.length > 8) list.push('Höchstens 8 Spieler auswählen.');
-    if (selected.some((r) => !r.name.trim())) list.push('Alle ausgewählten Spieler brauchen einen Namen.');
-    const names = selected.map((r) => r.name.trim().toLowerCase()).filter(Boolean);
+    if (rows.some((r) => !r.name.trim())) list.push('Alle Spieler brauchen einen Namen.');
+    const names = rows.map((r) => r.name.trim().toLowerCase()).filter(Boolean);
     if (new Set(names).size !== names.length) list.push('Namen müssen verschieden sein.');
     if (previousId && !admin && !/^\d{4}$/.test(previousPin)) list.push('PIN des Vorgängers eingeben (4 Ziffern).');
     return list;
-  }, [selected, previousId, previousPin, admin]);
+  }, [rows, previousId, previousPin, admin]);
 
   const update = (key, patch) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   // Jeden Marker gibt es nur einmal, und ein Spieler trägt höchstens einen
@@ -83,7 +81,7 @@ export default function NewTournament() {
     setBusy(true);
     setError('');
     try {
-      const players = selected.map((r) => ({
+      const players = rows.map((r) => ({
         name: r.name.trim(),
         team: r.team.trim(),
         ...(r.champion ? { champion: true } : {}),
@@ -141,13 +139,10 @@ export default function NewTournament() {
           </div>
         )}
 
-        <Section>Spieler ({selected.length})</Section>
-        <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>✓ = spielt mit · 👑 amtierender Meister · 🥈 amtierender Zweiter · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
+        <Section>Spieler ({rows.length})</Section>
+        <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>Mindestens 4, höchstens 8 Spieler · 👑 amtierender Meister · 🥈 amtierender Zweiter · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
         {rows.map((r, i) => (
-          <div key={r.key} className={`player-row ${r.selected ? '' : 'off'}`}>
-            <button type="button" className="check" aria-pressed={r.selected} aria-label={`Spieler ${i + 1} dabei`} onClick={() => update(r.key, { selected: !r.selected })}>
-              {r.selected ? '✓' : ''}
-            </button>
+          <div key={r.key} className="player-row">
             <div className="fields">
               <div className="namerow">
                 <input className="input" placeholder={`Spieler ${i + 1}`} aria-label={`Name Spieler ${i + 1}`} value={r.name} maxLength={30} onChange={(e) => update(r.key, { name: e.target.value })} />
@@ -157,6 +152,9 @@ export default function NewTournament() {
               </div>
               <input className="input" placeholder="Team (optional)" aria-label={`Team Spieler ${i + 1}`} value={r.team} maxLength={30} onChange={(e) => update(r.key, { team: e.target.value })} />
             </div>
+            {rows.length > MIN_ROWS && (
+              <button type="button" className="remove" aria-label={`Spieler ${i + 1} entfernen`} title="Spieler entfernen" onClick={() => setRows((l) => l.filter((x) => x.key !== r.key))}>✕</button>
+            )}
           </div>
         ))}
         {rows.length < MAX_ROWS && (

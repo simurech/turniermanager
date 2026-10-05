@@ -142,12 +142,10 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .error { background: #c8372d22; border: 2px solid var(--red); border-radius: 6px; padding: 10px 12px; margin: 0 4px 12px 0; font-size: 14px; }
 .notice { background: var(--paper2); border: 2px dashed var(--ink); border-radius: 6px; padding: 10px 12px; margin: 0 4px 12px 0; font-size: 14px; }
 
-.player-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: start; margin: 0 4px 12px 0; padding: 10px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--ink); }
-.player-row.off { opacity: 0.5; }
+.player-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; margin: 0 4px 12px 0; padding: 10px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--ink); }
 .player-row .fields { display: grid; gap: 6px; }
 .player-row .input { box-shadow: none; min-height: 44px; padding: 8px 10px; }
-.check { width: 36px; height: 36px; border: 2.5px solid var(--ink); border-radius: 6px; background: var(--paper2); font-size: 20px; line-height: 1; display: grid; place-items: center; }
-.check[aria-pressed='true'] { background: var(--green); color: var(--paper); }
+.remove { width: 36px; height: 36px; border: 2.5px solid var(--ink); border-radius: 6px; background: var(--paper2); color: var(--red); font-size: 18px; font-weight: 700; line-height: 1; display: grid; place-items: center; }
 .namerow { display: grid; grid-template-columns: 1fr 44px 44px; gap: 6px; }
 .mark { border: 2px solid var(--ink); background: var(--paper2); border-radius: 6px; font-size: 20px; width: 44px; height: 44px; display: grid; place-items: center; filter: grayscale(1); opacity: 0.7; }
 .mark[aria-pressed='true'] { filter: none; opacity: 1; }
@@ -249,7 +247,7 @@ h2.section::after { content: ''; flex: 1; border-top: 3px double var(--ink); }
 .tv .tbl .tr { align-items: center; }
 
 /* Touch-Flächen und Eingaben (iOS zoomt unter 16 px, kleine Flächen sind schwer zu treffen) */
-.check { width: 44px; height: 44px; }
+.remove { width: 44px; height: 44px; }
 .input, select.input, .player-row .input { font-size: 16px; }
 .sync { min-height: 32px; font-family: inherit; }
 button.sync { cursor: pointer; }
