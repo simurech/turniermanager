@@ -160,18 +160,49 @@ test('falscher Admin-Code wird abgelehnt', async () => {
   assert.equal((await call('admin_check', { headers: { 'X-Admin': ADMIN } })).status, 200);
 });
 
-test('Vorgänger: nur mit dessen PIN oder als Admin', async () => {
+test('Vorgänger: Gäste nur über den Export, Admin direkt', async () => {
   const { json: prev } = await create({ data: { phase: 'finished' } });
-  assert.equal((await create({ top: { previousId: prev.id } })).status, 401);
-  const wrong = prev.pin === '1234' ? '4321' : '1234';
-  assert.equal((await create({ top: { previousId: prev.id, previousPin: wrong } })).status, 403);
-  const ok = await create({ top: { previousId: prev.id, previousPin: prev.pin } });
-  assert.equal(ok.status, 201);
-  const loaded = await call('load', { method: 'GET', query: `&id=${ok.json.id}` });
-  assert.equal(loaded.json.previousId, prev.id);
+  assert.equal((await create({ top: { previousId: prev.id } })).status, 403);
+  assert.equal((await create({ top: { previousId: prev.id, previousPin: prev.pin } })).status, 403);
   const viaAdmin = await create({ top: { previousId: prev.id } }, { 'X-Admin': ADMIN });
   assert.equal(viaAdmin.status, 201);
-  assert.equal((await create({ top: { previousId: 'ZZZZZZ' } })).status, 404);
+  const loaded = await call('load', { method: 'GET', query: `&id=${viaAdmin.json.id}` });
+  assert.equal(loaded.json.previousId, prev.id);
+  assert.equal((await create({ top: { previousId: 'ZZZZZZ' } }, { 'X-Admin': ADMIN })).status, 404);
+});
+
+test('Gast-Turnier läuft nach 48 Stunden ab, Admin-Turnier nie; Export-Vorgänger werden gespeichert', async () => {
+  const finished = sample({ phase: 'finished', matches: [], winner: 0, loser: 1 });
+  const g = await create({ top: { history: [{ ...finished, createdAt: '2025-10-01T10:00:00+02:00' }] } });
+  assert.equal(g.status, 201);
+  assert.ok(g.json.expiresAt);
+  const adm = await create({}, { 'X-Admin': ADMIN });
+  assert.equal(adm.json.expiresAt, null);
+  const loaded = await call('load', { method: 'GET', query: `&id=${g.json.id}` });
+  assert.equal(loaded.json.history.length, 1);
+  assert.equal(loaded.json.history[0].createdAt, '2025-10-01T10:00:00+02:00');
+  assert.ok(loaded.json.expiresAt);
+  // Updates ändern weder Verlauf noch Ablauf
+  const up = await call('update', { body: { id: g.json.id, version: 1, data: sample() }, headers: { 'X-Pin': g.json.pin } });
+  assert.equal(up.status, 200);
+  const again = await call('load', { method: 'GET', query: `&id=${g.json.id}` });
+  assert.equal(again.json.history.length, 1);
+  assert.equal(again.json.expiresAt, loaded.json.expiresAt);
+  // ungültige Vorgänger
+  assert.equal((await create({ top: { history: [sample()] } })).status, 400);
+  assert.equal((await create({ top: { history: 'x' } })).status, 400);
+  // Ablauf: Datei auf vergangen setzen
+  const file = join(storage, 'tournaments', `${g.json.id}.json`);
+  const doc = JSON.parse(readFileSync(file, 'utf8'));
+  doc.expiresAt = new Date(Date.now() - 1000).toISOString();
+  writeFileSync(file, JSON.stringify(doc));
+  assert.equal((await call('load', { method: 'GET', query: `&id=${g.json.id}` })).status, 404);
+  const list = await call('list', { method: 'GET' });
+  assert.ok(!list.json.tournaments.some((x) => x.id === g.json.id));
+  rmSync(join(storage, 'expire.marker'), { force: true });
+  await call('list', { method: 'GET' });
+  assert.equal(existsSync(file), false, 'abgelaufenes Turnier wird gelöscht');
+  assert.ok(existsSync(join(storage, 'tournaments', `${adm.json.id}.json`)));
 });
 
 test('Foto: braucht PIN, nur Bilder, wird als JPEG gespeichert', async () => {
@@ -271,10 +302,10 @@ test('Admin setzt den PIN neu und hebt damit die Sperre auf', async () => {
 test('falsche Datentypen führen zu einer sauberen JSON-Antwort statt zu PHP-Warnungen', async () => {
   const { json: prev } = await create();
   const res = await call('create', { body: { data: sample(), previousId: prev.id, previousPin: [1] } });
-  assert.equal(res.status, 401);
+  assert.equal(res.status, 403);
   assert.ok(res.json?.error);
   const res2 = await call('create', { body: { data: sample(), previousId: ['x'] } });
-  assert.equal(res2.status, 404);
+  assert.equal(res2.status, 403);
   const res3 = await call('update', { body: { id: ['A'], version: 1, data: sample() } });
   assert.equal(res3.status, 400);
   assert.equal((await call('load', { method: 'GET', query: '&id[]=A' })).status, 400);

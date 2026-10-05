@@ -63,6 +63,22 @@ function env_limit(string $name, int $default): int
     return ($value !== false && ctype_digit($value)) ? (int) $value : $default;
 }
 
+/** Wie lange ein Turnier eines Gasts (ohne Admin-Code) erhalten bleibt (Sekunden). */
+function guest_seconds(): int
+{
+    return env_limit('TM_GUEST_HOURS', 48) * 3600;
+}
+
+/** Ob ein Gast-Turnier abgelaufen ist. Turniere des Admins haben kein Ablaufdatum. */
+function is_expired(array $t): bool
+{
+    if (empty($t['expiresAt'])) {
+        return false;
+    }
+    $until = strtotime((string) $t['expiresAt']);
+    return $until !== false && $until <= time();
+}
+
 /** Wie lange ein abgeschlossenes Turnier für Gäste sichtbar bleibt (Sekunden). */
 function finished_visible_seconds(): int
 {
@@ -186,7 +202,7 @@ function read_tournament(string $id): ?array
         error_log("api.php: Turnierdatei $id ist unlesbar oder beschädigt");
         fail(500, 'Turnierdatei konnte nicht gelesen werden');
     }
-    return $doc;
+    return is_expired($doc) ? null : $doc; // abgelaufene Gast-Turniere gelten als gelöscht, auch bevor sie aufgeräumt sind
 }
 
 function write_tournament(array $doc): void
@@ -502,6 +518,31 @@ function validate_data(mixed $data): array
     return $clean;
 }
 
+/** Vorgänger-Turniere aus einer Export-Datei (höchstens 5). Es bleiben nur die Felder, die Statistik und Tipp brauchen. */
+function clean_history(mixed $history): array
+{
+    if ($history === null) {
+        return [];
+    }
+    if (!is_array($history) || !array_is_list($history) || count($history) > 5) {
+        fail(400, 'Ungültiger Export (Vorgänger)');
+    }
+    $result = [];
+    foreach ($history as $entry) {
+        $doc = validate_data($entry);
+        if (($doc['phase'] ?? '') !== 'finished' || !isset($doc['players'], $doc['matches'])) {
+            fail(400, 'Der Export enthält ein Turnier, das nicht abgeschlossen ist');
+        }
+        foreach (['createdAt', 'finishedAt'] as $key) {
+            if (isset($entry[$key]) && is_string($entry[$key]) && strlen($entry[$key]) <= 40) {
+                $doc[$key] = $entry[$key];
+            }
+        }
+        $result[] = $doc;
+    }
+    return $result;
+}
+
 function body_id(array $body): string
 {
     $id = $body['id'] ?? '';
@@ -536,6 +577,7 @@ function summary(array $t, bool $isAdmin): array
         'hasPhoto' => !empty($t['photoVersion']),
         'photoVersion' => $t['photoVersion'] ?? null,
         'previousId' => $t['previousId'] ?? null,
+        'expiresAt' => $t['expiresAt'] ?? null,
     ];
     if ($isAdmin) {
         $public = is_public($t);
@@ -547,14 +589,16 @@ function summary(array $t, bool $isAdmin): array
     return $row;
 }
 
-function all_tournaments(): array
+function all_tournaments(bool $withExpired = false): array
 {
     $result = [];
     foreach (glob(storage_dir() . '/tournaments/*.json') ?: [] as $file) {
         $raw = file_get_contents($file);
         $doc = $raw === false ? null : json_decode($raw, true);
         if (is_array($doc) && isset($doc['id'])) {
-            $result[] = $doc;
+            if ($withExpired || !is_expired($doc)) {
+                $result[] = $doc;
+            }
         } else {
             error_log('api.php: überspringe unlesbare Datei ' . basename($file));
         }
@@ -574,6 +618,24 @@ function delete_tournament(string $id): void
 {
     remove_file(tournament_path($id));
     remove_file(photo_dir() . "/$id.jpg");
+}
+
+/** Löscht abgelaufene Gast-Turniere samt Foto. Läuft höchstens alle 5 Minuten, beim Auflisten und Erstellen. */
+function purge_expired(): void
+{
+    $marker = storage_dir() . '/expire.marker';
+    if (is_file($marker) && filemtime($marker) > time() - 300) {
+        return;
+    }
+    with_lock(static function () use ($marker): void {
+        touch($marker);
+        foreach (all_tournaments(true) as $t) {
+            if (is_expired($t)) {
+                error_log("api.php: lösche abgelaufenes Gast-Turnier {$t['id']} (ablauf {$t['expiresAt']})");
+                delete_tournament($t['id']);
+            }
+        }
+    });
 }
 
 /**
@@ -630,6 +692,7 @@ function action_list(): never
     if (($_SERVER['HTTP_X_ADMIN'] ?? '') !== '') {
         $isAdmin = authenticate(null) === 'admin';
     }
+    purge_expired();
     cleanup_empty();
     $rows = [];
     foreach (all_tournaments() as $t) {
@@ -681,19 +744,14 @@ function action_create(): never
 
     $previousId = $body['previousId'] ?? null;
     if ($previousId !== null) {
-        if (!valid_id($previousId) || ($previous = read_tournament($previousId)) === null) {
+        if (!$isAdmin) {
+            fail(403, 'Als Gast kann ein früheres Turnier nur über die Export-Datei übernommen werden.');
+        }
+        if (!valid_id($previousId) || read_tournament($previousId) === null) {
             fail(404, 'Vorgänger-Turnier nicht gefunden');
         }
-        if (!$isAdmin) {
-            $previousPin = $body['previousPin'] ?? null;
-            if (!is_string($previousPin) || $previousPin === '') {
-                fail(401, 'PIN des Vorgängers erforderlich');
-            }
-            if (!check_pin($previous, $previousPin)) {
-                fail(403, 'Falscher PIN des Vorgängers');
-            }
-        }
     }
+    $history = clean_history($body['history'] ?? null);
 
     if (!$isAdmin) {
         $wait = create_slot();
@@ -703,8 +761,10 @@ function action_create(): never
         }
     }
 
+    purge_expired();
     $pin = generate_pin();
-    $doc = with_lock(static function () use ($data, $previousId, $pin): array {
+    $expiresAt = $isAdmin ? null : date('c', time() + guest_seconds());
+    $doc = with_lock(static function () use ($data, $previousId, $pin, $history, $expiresAt): array {
         $now = date('c');
         $doc = $data + ['phase' => 'setup'];
         $doc += [
@@ -716,10 +776,16 @@ function action_create(): never
             'hidden' => false,
             'pin' => $pin,
         ];
+        if ($history) {
+            $doc['history'] = $history;
+        }
+        if ($expiresAt !== null) {
+            $doc['expiresAt'] = $expiresAt;
+        }
         write_tournament($doc);
         return $doc;
     });
-    respond(['success' => true, 'id' => $doc['id'], 'pin' => $pin, 'version' => 1], 201);
+    respond(['success' => true, 'id' => $doc['id'], 'pin' => $pin, 'version' => 1, 'expiresAt' => $expiresAt], 201);
 }
 
 function action_update(): never

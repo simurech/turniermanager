@@ -6,6 +6,7 @@ import { headToHead, nextMatches, playerForm, tipText } from '../lib/stats.js';
 import { clearPin, dismissJustCreated, getAdmin, getPin, takeJustCreated } from '../lib/auth.js';
 import { PHASE_LABEL, copyText, nameOf, shareMessage, shareOrCopy, teamOf, tournamentUrl, whatsappUrl } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
+import { expiryText } from '../lib/exportFile.js';
 import { useApp } from '../context.jsx';
 import { Dots, Marks, Section, Segmented, Skeletons } from './ui.jsx';
 import { ConfirmDialog, PinDialog, PinInfoDialog, ResultSheet } from './Dialogs.jsx';
@@ -116,7 +117,7 @@ export default function Tournament({ id }) {
   // Ein veralteter Admin-Code auf dem Gerät wird bei einer Ablehnung vergessen, damit er nichts blockiert
   const t = useTournament(id, { onAuthFail: () => { if (getAdmin()) logoutAdmin(); } });
   const { doc, meta, status, sync, pending, dispatch, retry, refresh, notice, clearNotice, connection } = t;
-  const history = useHistory(meta?.previousId);
+  const history = useHistory(meta?.previousId, meta?.history);
   const [tab, setTab] = useState('overview');
   const [gamesView, setGamesView] = useState('group');
   const [filter, setFilter] = useState('all');
@@ -177,7 +178,7 @@ export default function Tournament({ id }) {
         <div className="topbar">
           <button className="iconbtn" onClick={() => navigate('/')} aria-label="Zurück">←</button>
         </div>
-        <p className="error" role="alert">{status === 'notfound' ? `Das Turnier „${id}“ gibt es nicht (mehr).` : 'Das Turnier konnte nicht geladen werden.'}</p>
+        <p className="error" role="alert">{status === 'notfound' ? `Das Turnier „${id}“ gibt es nicht (mehr). Turniere von Gästen werden nach 48 Stunden gelöscht.` : 'Das Turnier konnte nicht geladen werden.'}</p>
         <button className="btn" onClick={() => (status === 'error' ? window.location.reload() : navigate('/'))}>{status === 'error' ? 'Neu laden' : 'Zur Startseite'}</button>
       </main>
     );
@@ -261,11 +262,12 @@ export default function Tournament({ id }) {
         )}
       </div>
 
+      {meta.expiresAt && !finished && <p className="notice" role="status">⏳ Dieses Turnier wird am <strong>{expiryText(meta.expiresAt)}</strong> automatisch gelöscht. Nach dem Turnier kannst du die Ergebnisse exportieren.</p>}
       {justPin && <NewPinBanner pin={justPin} doc={doc} meta={meta} onClose={() => { dismissJustCreated(id); setJustPin(null); }} />}
 
       {tab === 'overview' && (
         <>
-          {finished && <Finished doc={doc} meta={meta} derived={derived} canEdit={canEdit} requireEdit={requireEdit} dispatch={dispatch} refresh={refresh} onError={(m) => toast(m, 'bad')} onReopen={() => setConfirm({ title: 'Turnier wieder öffnen?', text: 'Sieger und Verlierer werden zurückgesetzt, bis das Turnier erneut abgeschlossen wird.', confirmLabel: 'Wieder öffnen', onConfirm: () => dispatch({ type: 'reopen' }) })} />}
+          {finished && <Finished doc={doc} meta={meta} derived={derived} history={history.docs} canEdit={canEdit} requireEdit={requireEdit} dispatch={dispatch} refresh={refresh} onError={(m) => toast(m, 'bad')} onReopen={() => setConfirm({ title: 'Turnier wieder öffnen?', text: 'Sieger und Verlierer werden zurückgesetzt, bis das Turnier erneut abgeschlossen wird.', confirmLabel: 'Wieder öffnen', onConfirm: () => dispatch({ type: 'reopen' }) })} />}
 
           {!finished && upcoming.length > 0 && (
             <div className="banner">

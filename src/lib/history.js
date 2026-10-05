@@ -1,5 +1,5 @@
 // Lädt die Kette der Vorgänger-Turniere (previousId) für Statistik, Tipp und Quoten.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadTournament } from './api.js';
 
 const CACHE_MS = 5 * 60 * 1000;
@@ -37,11 +37,20 @@ export async function loadChain(previousId) {
   return { docs, incomplete };
 }
 
-export function useHistory(previousId) {
-  const [state, setState] = useState({ docs: [], loading: Boolean(previousId), incomplete: false });
+/** Vorgänger kommen aus der Export-Datei (`embedded`, Gast) oder werden über previousId vom Server geladen (Admin). */
+export function useHistory(previousId, embedded) {
+  const [state, setState] = useState({ docs: embedded?.length ? embedded : [], loading: !embedded?.length && Boolean(previousId), incomplete: false });
+  // Die Export-Daten ändern sich nie. Ein Verweis genügt, damit nicht jede Aktualisierung des Turniers neu rechnet.
+  const embeddedRef = useRef(embedded);
+  embeddedRef.current = embedded;
+  const embeddedCount = embedded?.length || 0;
   useEffect(() => {
     let cancelled = false;
     let timer;
+    if (embeddedCount) {
+      setState({ docs: embeddedRef.current, loading: false, incomplete: false });
+      return undefined;
+    }
     if (!previousId) {
       setState({ docs: [], loading: false, incomplete: false });
       return undefined;
@@ -59,6 +68,6 @@ export function useHistory(previousId) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [previousId]);
+  }, [previousId, embeddedCount]);
   return state;
 }

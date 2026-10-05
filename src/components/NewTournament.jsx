@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '../lib/api.js';
 import { setPin, rememberJustCreated } from '../lib/auth.js';
 import { navigate } from '../lib/router.js';
 import { DEFAULT_CONFIG, createDoc, deriveState } from '../lib/tournament.js';
 import { dateOf, yearOf } from '../lib/format.js';
+import { parseExport } from '../lib/exportFile.js';
 import { useApp } from '../context.jsx';
 import { Section, Segmented, Switch } from './ui.jsx';
 
@@ -18,7 +19,8 @@ export default function NewTournament() {
   const [name, setName] = useState(defaultName);
   const [finished, setFinished] = useState([]);
   const [previousId, setPreviousId] = useState('');
-  const [previousPin, setPreviousPin] = useState('');
+  const [imported, setImported] = useState(null); // Gast: { name, chain } aus der Export-Datei
+  const fileInput = useRef(null);
   const [rows, setRows] = useState(() => Array.from({ length: MIN_ROWS }, () => blankRow()));
   const [config, setConfig] = useState({ ...DEFAULT_CONFIG });
   const [busy, setBusy] = useState(false);
@@ -27,6 +29,13 @@ export default function NewTournament() {
   const [listState, setListState] = useState('loading'); // loading | ok | error
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    // Nur der Admin wählt Vorjahre aus der Liste. Gäste übernehmen sie über die Export-Datei.
+    if (!admin) {
+      setFinished([]);
+      setPreviousId('');
+      setListState('ok');
+      return;
+    }
     setListState('loading');
     api
       .listTournaments()
@@ -37,6 +46,29 @@ export default function NewTournament() {
       .catch(() => setListState('error'));
   }, [admin, reloadKey]);
 
+  // Spieler, Marker und Einstellungen eines früheren Turniers als Vorschlag übernehmen
+  function fillFrom(prev) {
+    const second = deriveState(prev).ranking?.[1];
+    setRows(prev.players.slice(0, MAX_ROWS).map((p, i) => blankRow({ name: p.name, champion: i === prev.winner, runnerUp: i === second, loserMark: i === prev.loser })));
+    setConfig((c) => ({ ...c, numTVs: prev.config?.numTVs ?? c.numTVs, doubleRoundRobin: Boolean(prev.config?.doubleRoundRobin), tiebreaker: prev.config?.tiebreaker ?? c.tiebreaker, thirdPlacePlayoff: prev.config?.thirdPlacePlayoff ?? c.thirdPlacePlayoff }));
+  }
+
+  async function onImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    try {
+      if (file.size > 200000) throw new Error('Die Datei ist zu gross für eine Export-Datei.');
+      const { tournament, chain } = parseExport(await file.text());
+      fillFrom(tournament);
+      setImported({ name: tournament.name || file.name, chain });
+    } catch (err) {
+      setImported(null);
+      setError(err.message);
+    }
+  }
+
   // Vorgänger gewählt: Spieler, Marker und Einstellungen als Vorschlag übernehmen
   useEffect(() => {
     if (!previousId) return undefined;
@@ -44,10 +76,7 @@ export default function NewTournament() {
     api
       .loadTournament(previousId)
       .then((prev) => {
-        if (!alive) return;
-        const second = deriveState(prev).ranking?.[1];
-        setRows(prev.players.slice(0, MAX_ROWS).map((p, i) => blankRow({ name: p.name, champion: i === prev.winner, runnerUp: i === second, loserMark: i === prev.loser })));
-        setConfig((c) => ({ ...c, numTVs: prev.config.numTVs ?? c.numTVs, doubleRoundRobin: Boolean(prev.config.doubleRoundRobin), tiebreaker: prev.config.tiebreaker ?? c.tiebreaker, thirdPlacePlayoff: prev.config.thirdPlacePlayoff ?? c.thirdPlacePlayoff }));
+        if (alive) fillFrom(prev);
       })
       .catch((e) => setError(e.message));
     return () => {
@@ -60,9 +89,8 @@ export default function NewTournament() {
     if (rows.some((r) => !r.name.trim())) list.push('Alle Spieler brauchen einen Namen.');
     const names = rows.map((r) => r.name.trim().toLowerCase()).filter(Boolean);
     if (new Set(names).size !== names.length) list.push('Namen müssen verschieden sein.');
-    if (previousId && !admin && !/^\d{4}$/.test(previousPin)) list.push('PIN des Vorgängers eingeben (4 Ziffern).');
     return list;
-  }, [rows, previousId, previousPin, admin]);
+  }, [rows]);
 
   const update = (key, patch) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   // Jeden Marker gibt es nur einmal, und ein Spieler trägt höchstens einen
@@ -89,7 +117,7 @@ export default function NewTournament() {
         ...(r.loserMark ? { loserMark: true } : {}),
       }));
       const doc = createDoc({ name: name.trim() || defaultName(), players, config });
-      const res = await api.createTournament({ data: doc, previousId, previousPin });
+      const res = await api.createTournament({ data: doc, previousId: admin ? previousId : '', history: admin ? null : imported?.chain });
       setPin(res.id, res.pin);
       rememberJustCreated(res.id, res.pin);
       navigate(`/t/${res.id}`);
@@ -120,7 +148,27 @@ export default function NewTournament() {
             <button type="button" className="link" onClick={() => setReloadKey((n) => n + 1)}>Erneut laden</button>
           </p>
         )}
-        {finished.length > 0 && (
+        {!admin && (
+          <div className="notice">
+            <strong>⏳ Gast-Turnier</strong>
+            <p style={{ margin: '4px 0 0' }}>Dein Turnier wird <strong>48 Stunden nach dem Start automatisch gelöscht</strong>. Nach dem Turnier kannst du die Ergebnisse als Datei exportieren und beim nächsten Mal wieder importieren.</p>
+          </div>
+        )}
+        {!admin && (
+          <div className="field">
+            <span className="label">Vorjahr importieren (optional)</span>
+            <input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
+            <button type="button" className="btn alt" style={{ width: 'calc(100% - 4px)' }} onClick={() => fileInput.current?.click()}>
+              {imported ? '📂 Andere Export-Datei wählen' : '📂 Export-Datei wählen'}
+            </button>
+            <p className="muted small" style={{ marginTop: 6 }}>
+              {imported
+                ? `✓ „${imported.name}“ geladen${imported.chain.length > 1 ? ` (mit ${imported.chain.length - 1} früheren Turnieren)` : ''}. Spieler und Einstellungen sind vorgeschlagen und lassen sich ändern.`
+                : 'Die Datei hast du nach dem letzten Turnier gespeichert. Sie liefert Spieler, Statistik, Tipps und Quoten. Ohne Datei startest du komplett neu.'}
+            </p>
+          </div>
+        )}
+        {admin && finished.length > 0 && (
           <div className="field">
             <label htmlFor="prev">Vorjahr als Basis (optional)</label>
             <select id="prev" className="input" value={previousId} onChange={(e) => { setPreviousId(e.target.value); setError(''); }}>
@@ -132,13 +180,6 @@ export default function NewTournament() {
             <p className="muted small" style={{ marginTop: 6 }}>Spieler und Einstellungen werden vorgeschlagen und lassen sich ändern. Das Vorjahr fliesst nur in Statistik und Quoten ein. Alle starten bei 0.</p>
           </div>
         )}
-        {previousId && !admin && (
-          <div className="field">
-            <label htmlFor="ppin">PIN des Vorgängers</label>
-            <input id="ppin" className="input pin-input" inputMode="numeric" maxLength={4} value={previousPin} onChange={(e) => setPreviousPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="····" />
-          </div>
-        )}
-
         <Section>Spieler ({rows.length})</Section>
         <p className="muted small" style={{ margin: '-4px 4px 12px 0' }}>Mindestens 4, höchstens 8 Spieler · 👑 amtierender Meister · 🥈 amtierender Zweiter · 🍋 amtierender Verlierer (optional, wird aus dem Vorjahr vorgeschlagen)</p>
         {rows.map((r, i) => (
@@ -180,6 +221,7 @@ export default function NewTournament() {
             {[...problems, error].filter(Boolean).map((p) => <div key={p}>{p}</div>)}
           </div>
         )}
+        {!admin && <p className="notice">⏳ Gast-Turnier: wird nach 48 Stunden gelöscht. Exportiere die Ergebnisse nach dem Turnier.</p>}
         <p className="notice">Nach dem Start bekommt das Turnier einen 4-stelligen PIN. Nur wer ihn kennt, darf Ergebnisse eintragen. Alle anderen können zuschauen.</p>
         <button className="btn" style={{ width: 'calc(100% - 4px)' }} disabled={busy || problems.length > 0 || listState !== 'ok'}>
           {busy ? 'Erstelle …' : 'Turnier starten'}

@@ -1,18 +1,20 @@
 import { useRef, useState } from 'react';
 import { shrinkImage, uploadPhoto } from '../lib/api.js';
 import { nameOf, photoUrl, shareMessage, shareOrCopy, teamOf, tournamentUrl, whatsappUrl } from '../lib/format.js';
+import { downloadExport, expiryText, resultsText } from '../lib/exportFile.js';
 import { Marks, Section } from './ui.jsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 /** Abschluss-Ansicht: Podium, Siegerfoto, Verlierer, Endrangliste. */
-export default function Finished({ doc, meta, derived, canEdit, requireEdit, refresh, onError, onReopen }) {
+export default function Finished({ doc, meta, derived, history = [], canEdit, requireEdit, refresh, onError, onReopen }) {
   const input = useRef(null);
   const [busy, setBusy] = useState(false);
   const ranking = derived.ranking || [];
   const winner = doc.players[doc.winner];
   const loser = doc.players[doc.loser];
   const message = shareMessage(doc, meta);
+  const [copied, setCopied] = useState(false);
 
   async function onFile(e) {
     const file = e.target.files?.[0];
@@ -66,6 +68,19 @@ export default function Finished({ doc, meta, derived, canEdit, requireEdit, ref
           <span aria-hidden>{MEDALS[i] || ''}</span>
         </div>
       ))}
+
+      {meta.expiresAt && (
+        <div className="notice export">
+          <strong>💾 Ergebnisse sichern</strong>
+          <p style={{ margin: '6px 0 10px' }}>
+            Dieses Turnier wird am <strong>{expiryText(meta.expiresAt)}</strong> gelöscht. Speichere die Export-Datei: Beim nächsten Turnier kannst du sie als Vorjahr importieren (Statistik, Tipps, Ewige Tabelle). Ohne Datei fängst du neu an.
+          </p>
+          <div className="btn-row">
+            <button type="button" className="btn" onClick={() => downloadExport(doc, meta, history)}>Export speichern</button>
+            <button type="button" className="btn alt" onClick={async () => setCopied((await shareOrCopy({ text: resultsText(doc) })) !== 'failed')}>{copied ? 'Geteilt ✓' : 'Ergebnisse als Text'}</button>
+          </div>
+        </div>
+      )}
 
       <div className="btn-row" style={{ margin: '16px 4px 6px 0' }}>
         <a className="btn" href={whatsappUrl(message)} target="_blank" rel="noreferrer">Auf WhatsApp teilen</a>
