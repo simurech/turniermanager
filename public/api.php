@@ -16,6 +16,7 @@ ini_set('log_errors', '1');
 error_reporting(E_ALL);
 date_default_timezone_set('Europe/Zurich');
 
+header_remove('X-Powered-By'); // PHP-Version nicht preisgeben
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
